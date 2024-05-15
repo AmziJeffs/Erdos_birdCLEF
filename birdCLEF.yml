@@ -5,6 +5,7 @@ dependencies:
   - _py-xgboost-mutex
   - jupyter
   - jupyter-lsp
+  - librosa
   - matplotlib
   - matplotlib-base
   - matplotlib-inline
