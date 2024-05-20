@@ -2,10 +2,10 @@
 
 
 ## Authors
-Amzi Jeffs  
-Junichi Koganemaru  
-Salil Singh  
-Ashwin T.A.N.   
+[Amzi Jeffs](https://github.com/AmziJeffs)  
+[Junichi Koganemaru](https://github.com/jkoganem)  
+[Salil Singh]()  
+[Ashwin T.A.N.](https://github.com/ashwintan1)     
 
 ## Overview
 
@@ -13,6 +13,6 @@ Climate change plays a devastating role in the destruction of natural habitats a
 
 ## Description of dataset
 
-We use a dataset provided by the BirdCLEF competition.
+We use a dataset provided by the [BirdCLEF 2024 competition](https://www.kaggle.com/competitions/birdclef-2024).
 
 ## Evaluation metric
