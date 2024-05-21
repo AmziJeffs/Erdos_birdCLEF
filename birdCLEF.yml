@@ -1,3 +1,12 @@
+# To install and activate, use the following commands:
+#   conda env create --name birdCLEF --file=birdCLEF.yml
+#   conda activate birdCLEF
+#   conda install torchvision torchaudio
+# For whatever reason, I get an error when I try to include torchvision
+# and torchaudio in the depdency list below; the error arises when I
+# attempt to import them in a notebook, namely the notebook thinks that they
+# do not exist --- Amzi on M1 Mac, May 2024.
+
 name: birdCLEF
 channels:
   - conda-forge
