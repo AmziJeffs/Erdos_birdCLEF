@@ -1,11 +1,13 @@
 name: birdCLEF
 channels:
   - conda-forge
+  - https://conda.anaconda.org/pytorch/osx-arm64/
 dependencies:
   - _py-xgboost-mutex
   - jupyter
   - jupyter-lsp
   - librosa
+  - libpng
   - matplotlib
   - matplotlib-base
   - matplotlib-inline
@@ -29,6 +31,7 @@ dependencies:
   - tensorflow
   - tensorflow-base
   - tensorflow-estimator
+  - pytorch
   - xgboost
   - pmdarima
   - pip:
