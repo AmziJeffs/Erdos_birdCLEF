@@ -1,0 +1,4 @@
+./data/test_soundscapes/*
+./data/train_audio/*
+./data/unlabeled_soundscapes/*
+.DS_Store

@@ -4,7 +4,7 @@
 ## Authors
 [Amzi Jeffs](https://github.com/AmziJeffs)  
 [Junichi Koganemaru](https://github.com/jkoganem)  
-[Salil Singh]()  
+[Salil Singh](https://github.com/sllsnghlrns)  
 [Ashwin T.A.N.](https://github.com/ashwintan1)     
 
 ## Overview
