@@ -1,6 +1,6 @@
-./data/test_soundscapes/*
-./data/train_audio/*
-./data/unlabeled_soundscapes/*
-./data/eBird_Taxonomy_v2021.csv
-./data/sample_submission.csv
+data/test_soundscapes/*
+data/train_audio/*
+data/unlabeled_soundscapes/*
+data/eBird_Taxonomy_v2021.csv
+data/sample_submission.csv
 .DS_Store
