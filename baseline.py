@@ -8,6 +8,7 @@ import librosa
 import os
 import IPython.display as ipd
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 print("Basic imports done.")
 
 
@@ -39,7 +40,7 @@ NUM_SPECIES = 182 # Number of bird species we need to label
 
 # Training hyperparameters
 BATCH_SIZE = 256 # Number of samples per batch while training our network
-NUM_EPOCHS = 5 # Number of epochs to train our network
+NUM_EPOCHS = 50 # Number of epochs to train our network
 LEARNING_RATE = 0.001 # Learning rate for our optimizer
 
 # Convenience and saving
@@ -203,10 +204,12 @@ print(f"Training on {len(train_dataset)} samples with {BATCH_SIZE} samples per b
 
 torch.enable_grad() # Turn on the gradient
 
-for epoch in range(NUM_EPOCHS):  # loop over the dataset multiple times
+training_losses = [0]*NUM_EPOCHS
+
+for epoch in tqdm(range(NUM_EPOCHS)):  # loop over the dataset multiple times
 
     running_loss = 0.0
-    for i, data in enumerate(train_dataloader):
+    for i, data in enumerate(tqdm(train_dataloader, leave=False)):
         # get the inputs; data is a list of [inputs, labels]
         inputs, labels = data
         inputs, labels = inputs.to(device), labels.to(device)
@@ -229,8 +232,9 @@ for epoch in range(NUM_EPOCHS):  # loop over the dataset multiple times
         if i % print_per_n_batches == print_per_n_batches-1:    # print after some batches
             print(f'[{epoch + 1}/{NUM_EPOCHS}, {(i + 1):5d}/{len(train_dataloader)}] loss: {running_loss / print_per_n_batches:.3f}')
             running_loss = 0.0
-
+    training_losses[epoch] = running_loss / len(train_dataloader)
 print('Finished Training')
+print(training_losses)
 
 
 
@@ -252,7 +256,7 @@ losses = []
 for i, data in enumerate(test_dataloader):
     inputs, labels = data
     inputs, labels = inputs.to(device), labels.to(device)
-    
+
     pred = model(inputs)
     losses += [float(criterion(pred, labels))]
 losses = pd.Series(losses)
