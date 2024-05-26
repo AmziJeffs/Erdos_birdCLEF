@@ -17,7 +17,7 @@ LEARNING_RATE = 0.001 # Learning rate for our optimizer
 # Directories
 DATA_DIR = "data/"
 AUDIO_DIR = DATA_DIR + "train_audio/"
-CHECKPOINT_DIR = "checkpoints/" # Checkpoints, models, and training data will be saved here
+CHECKPOINT_DIR = "../checkpoints/" # Checkpoints, models, and training data will be saved here
 MODEL_NAME = None
 
 # Preprocessing info
