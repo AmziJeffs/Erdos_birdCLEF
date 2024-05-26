@@ -134,14 +134,20 @@ class BirdDataset(Dataset):
     def __init__(self, filepaths, labels):
         super().__init__()
         self.filepaths = filepaths
-        self.labels = labels
+        self.labels, self.processed_clips = self.process(filepaths, labels)
+
+    def process(self, filepaths, labels):
+        results = []
+        for path in filepaths:
+            processed_clip = filepath_to_tensor(path)
+            results += [processed_clip]
+        return results, labels
 
     def __len__(self):
-        return len(self.filepaths)
+        return len(self.processed_clips)
 
     def __getitem__(self, index):
-        processed_clip = filepath_to_tensor(self.filepaths[index])
-        return processed_clip, self.labels[index]
+        return processed_clips[index], self.labels[index]
 
 ################################################################################
 # ARCHITECTURE
