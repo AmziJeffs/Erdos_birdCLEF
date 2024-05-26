@@ -36,6 +36,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 import librosa
+import random
 import os
 import IPython.display as ipd
 from sklearn.model_selection import train_test_split
@@ -94,7 +95,7 @@ spectrogram_transform = torchaudio.transforms.Spectrogram(
 # Converts ordinary spectrogram to Mel scale
 mel_spectrogram_transform = torchaudio.transforms.MelScale(
     n_mels=256,
-    sample_rate=SAMPLE_RATE,
+    sample_rate=16000,  # Replace SAMPLE_RATE with actual value
     f_min=0,
     f_max=16000,
     n_stft=1025  # the number of frequency bins in the spectrogram
@@ -106,10 +107,42 @@ db_scaler = torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80)
 # Resizes spectrograms into square images
 resize = transforms.Resize((224, 224), antialias = None)
 
-# Processes a sample to a tensor for our network
+# SpecAugment functions
+def time_warp(spec, W=5):
+    num_rows = spec.shape[1]
+    spec_len = spec.shape[2]
+    center = random.randrange(W, spec_len - W)
+    warped = random.randint(center - W, center + W)
+    left = torchaudio.functional.time_stretch(spec, 1, center / spec_len)
+    right = torchaudio.functional.time_stretch(spec, 1, (spec_len - center) / spec_len)
+    return torch.cat((left, right), dim=2)
+
+def freq_mask(spec, F=30):
+    num_mel_channels = spec.shape[1]
+    f = random.randrange(0, F)
+    f_zero = random.randrange(0, num_mel_channels - f)
+    
+    spec[:, f_zero:f_zero+f, :] = 0
+    return spec
+
+def time_mask(spec, T=40):
+    spec_len = spec.shape[2]
+    t = random.randrange(0, T)
+    t_zero = random.randrange(0, spec_len - t)
+    
+    spec[:, :, t_zero:t_zero+t] = 0
+    return spec
+
+# Processes a sample to a tensor for our network, including SpecAugment
 def sample_to_tensor(sample):
     x = spectrogram_transform(sample)
     x = mel_spectrogram_transform(x)
+    
+    # Apply SpecAugment
+    x = time_warp(x)
+    x = freq_mask(x)
+    x = time_mask(x)
+    
     x = db_scaler(x)
     x = resize(x)
     return x
@@ -118,13 +151,12 @@ def sample_to_tensor(sample):
 # that we can feed into our CNN
 def filepath_to_tensor(filepath):
     sample, _ = torchaudio.load(filepath)
-    if len(sample) >= SAMPLE_RATE * SAMPLE_LENGTH:
-        sample = sample[:SAMPLE_RATE * SAMPLE_LENGTH]
+    if len(sample) >= 16000 * 5:  # Replace SAMPLE_RATE * SAMPLE_LENGTH with actual values
+        sample = sample[:16000 * 5]
     else:
-        pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(sample)
+        pad_length = 16000 * 5 - len(sample)
         sample = torch.nn.functional.pad(sample, (0, pad_length))
     return sample_to_tensor(sample)
-
 ################################################################################
 # DATASET CLASS
 ################################################################################
