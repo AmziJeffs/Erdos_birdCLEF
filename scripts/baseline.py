@@ -3,7 +3,7 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = False # Set to True to train and validate on 50 rows of data, for quick funcitonality tests etc
+ABRIDGED_RUN = True # Set to True to train and validate on 50 rows of data, for quick funcitonality tests etc
 SAVE_AFTER_TRAINING = True # Save the model when you are done
 SAVE_CHECKPOINTS = True # Save the model after ever epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
@@ -72,12 +72,12 @@ data['tensor_label'] = pd.Series(pd.get_dummies(data['primary_label']).astype(in
 data.sample(5)
 
 # Train test split, stratified by species
-data_train, data_test = train_test_split(data, test_size = 0.2, stratify=data['primary_label'])
+data_train, data_validation = train_test_split(data, test_size = 0.2, stratify=data['primary_label'])
 
 # Use 10 rows of data for quick runs to test compile/functionality
 if ABRIDGED_RUN == True:
     data_train = data_train.sample(50)
-    data_test = data_test.sample(50)
+    data_validation = data_validation.sample(50)
 
 ################################################################################
 # PREPROCESSING FUNCTIONS
@@ -138,7 +138,6 @@ class BirdDataset(Dataset):
 
     def process(self, filepaths, labels):
         results = []
-        print("Preprocessing data and loading to memory")
         for path in tqdm(filepaths):
             processed_clip = filepath_to_tensor(path)
             results += [processed_clip]
@@ -215,11 +214,13 @@ if SAVE_AFTER_TRAINING or SAVE_CHECKPOINTS or REPORT_TRAINING_LOSS_PER_EPOCH or 
     output_dir.mkdir(parents=True, exist_ok=True)
 
 # Instantiate our training dataset
+print("Loading training data to memory")
 train_dataset = BirdDataset(filepaths = data_train['filepath'].to_list(), labels = data_train['tensor_label'].to_list())
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 # Instantiate our validation dataset
-validation_dataset =  BirdDataset(filepaths = data_test['filepath'].to_list(), labels = data_test['tensor_label'].to_list())
+print("Loading validation data to memory")
+validation_dataset =  BirdDataset(filepaths = data_validation['filepath'].to_list(), labels = data_validation['tensor_label'].to_list())
 validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False)
 
 # Instantiate our model
@@ -295,9 +296,16 @@ print('Finished Training')
 # SAVE AND REPORT
 ################################################################################
 
+# Save train test split
+if SAVE_AFTER_TRAINING or SAVE_CHECKPOINTS or REPORT_TRAINING_LOSS_PER_EPOCH or REPORT_VALIDATION_LOSS_PER_EPOCH:
+    data_train.to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/data_train.csv", index = False)
+    data_validation.to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/data_validation.csv", index = False)
+
+# Save model
 if SAVE_AFTER_TRAINING == True:
     torch.save(model.state_dict(), f"{CHECKPOINT_DIR}{MODEL_NAME}/final.pt")
 
+# Save losses
 losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
 cols = []
 if REPORT_TRAINING_LOSS_PER_EPOCH == True:
@@ -305,6 +313,6 @@ if REPORT_TRAINING_LOSS_PER_EPOCH == True:
 if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
     cols += ["validation_losses"]
 if len(cols) > 0:
-    losses[cols].to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/losses.csv")
+    losses[cols].to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/losses.csv", index = False)
     print(losses)
 
