@@ -3,7 +3,7 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = False # Set to True to train and validate on 10% of the data, for quick funcitonality tests etc
+ABRIDGED_RUN = False # Set to True to train and validate on 50 rows of data, for quick funcitonality tests etc
 SAVE_AFTER_TRAINING = True # Save the model when you are done
 SAVE_CHECKPOINTS = True # Save the model after ever epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
@@ -74,10 +74,10 @@ data.sample(5)
 # Train test split, stratified by species
 data_train, data_test = train_test_split(data, test_size = 0.2, stratify=data['primary_label'])
 
-# Use 10% of data for quick runs to test compile/functionality
+# Use 10 rows of data for quick runs to test compile/functionality
 if ABRIDGED_RUN == True:
-    data_train = data_train.sample(int(len(data_train)*0.1))
-    data_test = data_test.sample(int(len(data_train)*0.1))
+    data_train = data_train.sample(50)
+    data_test = data_test.sample(50)
 
 ################################################################################
 # PREPROCESSING FUNCTIONS
@@ -134,11 +134,12 @@ class BirdDataset(Dataset):
     def __init__(self, filepaths, labels):
         super().__init__()
         self.filepaths = filepaths
-        self.labels, self.processed_clips = self.process(filepaths, labels)
+        self.processed_clips, self.labels = self.process(filepaths, labels)
 
     def process(self, filepaths, labels):
         results = []
-        for path in filepaths:
+        print("Preprocessing data and loading to memory")
+        for path in tqdm(filepaths):
             processed_clip = filepath_to_tensor(path)
             results += [processed_clip]
         return results, labels
@@ -147,7 +148,7 @@ class BirdDataset(Dataset):
         return len(self.processed_clips)
 
     def __getitem__(self, index):
-        return processed_clips[index], self.labels[index]
+        return self.processed_clips[index], self.labels[index]
 
 ################################################################################
 # ARCHITECTURE
