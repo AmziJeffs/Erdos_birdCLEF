@@ -18,7 +18,7 @@ NUM_FOLDS = 5 # Number of folds for k-fold cross-validation
 # Directories
 DATA_DIR = "data/"
 AUDIO_DIR = DATA_DIR + "train_audio/"
-CHECKPOINT_DIR = "../checkpoints/" # Checkpoints, models, and training data will be saved here
+CHECKPOINT_DIR = "checkpoints/" # Checkpoints, models, and training data will be saved here
 MODEL_NAME = None
 
 # Preprocessing info
@@ -35,8 +35,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import plotly.express as px
-import librosa
 import random
 import os
 import IPython.display as ipd
@@ -61,6 +59,7 @@ import torch.optim as optim
 # LOAD DATA
 ################################################################################
 
+
 data = pd.read_csv(DATA_DIR+"train_metadata.csv")
 data['filepath'] = AUDIO_DIR + data['filename']
 
@@ -73,9 +72,24 @@ species_to_index = {species[i]:i for i in range(len(species))}
 data['tensor_label'] = pd.Series(pd.get_dummies(data['primary_label']).astype(int).values.tolist()).apply(lambda x: torch.Tensor(x))
 data.sample(5)
 
-# Use 10% of data for quick runs to test compile/functionality
+# Use 100 rows of data for quick runs to test functionalities
 if ABRIDGED_RUN == True:
-    data = data.sample(int(len(data)*0.1))
+    data = data.sample(100)
+
+print("Loading audio signals into memory")
+tqdm.pandas()
+def filepath_to_signal(filepath):
+    sample, _ = torchaudio.load(filepath)
+    return sample
+data['signal'] = data['filepath'].progress_apply(filepath_to_signal)
+print("Done")
+
+# Train test split, stratified by species
+stratify = data['primary_label']
+if ABRIDGED_RUN == True:
+    stratify = None
+data_train, data_validation = train_test_split(data, test_size = 0.2, stratify=stratify)
+
 
 ################################################################################
 # PREPROCESSING FUNCTIONS
@@ -136,7 +150,7 @@ def sample_to_tensor(sample):
     x = mel_spectrogram_transform(x)
     
     # Apply SpecAugment
-    x = time_warp(x)
+    # x = time_warp(x)
     x = freq_mask(x)
     x = time_mask(x)
     
@@ -159,18 +173,19 @@ def filepath_to_tensor(filepath):
 # DATASET CLASS
 ################################################################################
 
-# Note: filepaths and labels should be ordinary lists
+# Note: signals and labels should be ordinary lists
 class BirdDataset(Dataset):
-    def __init__(self, filepaths, labels):
+    def __init__(self, signals, labels):
         super().__init__()
-        self.filepaths = filepaths
+        self.signals = signals
         self.labels = labels
 
     def __len__(self):
-        return len(self.filepaths)
+        return len(self.signals)
 
     def __getitem__(self, index):
-        processed_clip = filepath_to_tensor(self.filepaths[index])
+        signal = self.signals[index]
+        processed_clip = sample_to_tensor(signal)
         return processed_clip, self.labels[index]
 
 ################################################################################
@@ -265,11 +280,11 @@ for fold, (train_index, val_index) in enumerate(kf.split(data)):
     val_data = data.iloc[val_index]
 
     # Instantiate our training dataset
-    train_dataset = BirdDataset(filepaths = train_data['filepath'].to_list(), labels = train_data['tensor_label'].to_list())
+    train_dataset = BirdDataset(signals = train_data['signal'].to_list(), labels = train_data['tensor_label'].to_list())
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     # Instantiate our validation dataset
-    validation_dataset = BirdDataset(filepaths = val_data['filepath'].to_list(), labels = val_data['tensor_label'].to_list())
+    validation_dataset = BirdDataset(signals = val_data['signal'].to_list(), labels = val_data['tensor_label'].to_list())
     validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False)
 
     # Instantiate our model
