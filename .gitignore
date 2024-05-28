@@ -1,7 +1,6 @@
 data/test_soundscapes/*
 data/train_audio/*
 data/unlabeled_soundscapes/*
-data/train_soundscapes_2021/*
 data/eBird_Taxonomy_v2021.csv
 data/sample_submission.csv
 checkpoints/
