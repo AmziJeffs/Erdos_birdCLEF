@@ -3,7 +3,7 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = False # Set to True to train and validate on 50 rows of data, for quick funcitonality tests etc
+ABRIDGED_RUN = True # Set to True to train and validate on 50 rows of data, for quick funcitonality tests etc
 SAVE_AFTER_TRAINING = True # Save the model when you are done
 SAVE_CHECKPOINTS = True # Save the model after ever epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
@@ -118,8 +118,8 @@ def sample_to_tensor(sample):
 # that we can feed into our CNN
 def filepath_to_tensor(filepath):
     sample, _ = torchaudio.load(filepath)
-    if len(sample) >= SAMPLE_RATE * SAMPLE_LENGTH:
-        sample = sample[:SAMPLE_RATE * SAMPLE_LENGTH]
+    if sample.shape[1] >= SAMPLE_RATE * SAMPLE_LENGTH:
+        sample = sample[:, :SAMPLE_RATE * SAMPLE_LENGTH]
     else:
         pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(sample)
         sample = torch.nn.functional.pad(sample, (0, pad_length))
