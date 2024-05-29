@@ -10,21 +10,20 @@ REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and 
 REPORT_VALIDATION_LOSS_PER_EPOCH = True # Lets us make a nice learning curve after training
 
 # Training hyperparameters
-BATCH_SIZE = 64 # Number of samples per batch while training our network
-NUM_EPOCHS = 60 # Number of epochs to train our network
+BATCH_SIZE = 256 # Number of samples per batch while training our network
+NUM_EPOCHS = 20 # Number of epochs to train our network
 LEARNING_RATE = 0.001 # Learning rate for our optimizer
 
 # Directories
 CHECKPOINT_DIR = "checkpoints/" # Checkpoints, models, and training data will be saved here
 DATA_DIR = "data/"
 AUDIO_DIR = DATA_DIR + "train_audio/"
-MODEL_NAME = "RESNET50"
+MODEL_NAME = None
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
 SAMPLE_LENGTH = 5 # Duration we want to crop our audio to
 NUM_SPECIES = 182 # Number of bird species we need to label
-MAX_SAMPLE_LENGTH = 60 # Trim every sample to <= 60 seconds
 
 ################################################################################
 # IMPORTS
@@ -79,7 +78,7 @@ data.sample(5)
 
 # Use 100 rows of data for quick runs to test functionalities
 if ABRIDGED_RUN == True:
-    data = data.sample(10)
+    data = data.sample(100)
 
 print("Loading audio signals into memory")
 tqdm.pandas()
@@ -150,6 +149,8 @@ def time_mask(spec, T=40):
 ################################################################################
 ################################################################################
 
+MODEL_NAME = "FOUR_LAYERS"
+
 ################################################################################
 # DATASET CLASS
 ################################################################################
@@ -168,15 +169,15 @@ class BirdDataset(Dataset):
 
     def process(self, signals, labels):
         results = []
-        new_labels = []
-        for i, signal in enumerate(tqdm(signals, total = len(signals), leave = False)):
-            # Uniformize to at least 5 seconds
-            if signal.shape[1] < SAMPLE_RATE * SAMPLE_LENGTH:
+        for signal in tqdm(signals, total = len(signals), leave = False):
+            # Uniformize to 5 seconds
+           if signal.shape[1] > SAMPLE_RATE * MAX_SAMPLE_LENGTH:
+                signal = signal[:,:SAMPLE_RATE * MAX_SAMPLE_LENGTH]
+            else:
                 pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(signal)
                 signal = torch.nn.functional.pad(signal, (0, pad_length))
             results += [signal]
-            new_labels += [labels[i]]
-        return results, new_labels
+        return results, labels
 
     def __len__(self):
         return len(self.processed_clips)
@@ -184,34 +185,80 @@ class BirdDataset(Dataset):
     def __getitem__(self, index):
         # Process clip to tensor
         x = self.processed_clips[index]
-
-        # Get a random 5-second clip from the whole sample
-        start = np.random.randint(x.shape[1]-SAMPLE_RATE*SAMPLE_LENGTH+1)
-        x = x[:, start:start + SAMPLE_RATE*SAMPLE_LENGTH]
-
-        # Process
         x = spectrogram_transform(x)
         if self.config['use_mel']:
             x = mel_spectrogram_transform(x)
-        exponent = 2
-        if self.training:
-            exponent = np.random.uniform(low = 0.5, high = 3)
-        x = torch.pow(x, exponent)
         x = db_scaler(x)
         if self.config['time_mask'] and self.training:
             x = time_mask(x)
         if self.config['freq_mask'] and self.training:
             x = freq_mask(x)
         x = resize(x)
-        return x.expand(3, 224, 224), self.labels[index]
+        return x, self.labels[index]
 
 ################################################################################
-# WEIGHTED RANDOM SAMPLER SETUP
+# ARCHITECTURE
 ################################################################################
 
-label_counts = data_train['primary_label'].value_counts()
-weights = data_train['primary_label'].apply(lambda x: 1/label_counts.loc[x])
-weighted_sampler = torch.utils.data.WeightedRandomSampler(weights.to_list(), len(weights))
+class BirdClassifier(nn.Module):
+    ''' Full architecture from https://github.com/musikalkemist/pytorchforaudio/blob/main/10%20Predictions%20with%20sound%20classifier/cnn.py'''
+    def __init__(self, num_classes):
+        super(BirdClassifier, self).__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=16,
+                kernel_size=3,
+                stride=1,
+                padding=2
+            ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=16,
+                out_channels=32,
+                kernel_size=3,
+                stride=1,
+                padding=2
+            ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2)
+        )
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=32,
+                out_channels=64,
+                kernel_size=3,
+                stride=1,
+                padding=2
+            ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2)
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=128,
+                kernel_size=3,
+                stride=1,
+                padding=2
+            ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2)
+        )
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(28800, num_classes)
+
+    def forward(self, input_data):
+        x = self.conv1(input_data)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.flatten(x)
+        x = self.linear(x)
+        return x
 
 ################################################################################
 # TRAINING SETUP
@@ -234,9 +281,7 @@ output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
 train_dataset = BirdDataset(signals = data_train['signal'].to_list(), 
                             labels = data_train['tensor_label'].to_list(),
                             training = True)
-train_dataloader = DataLoader(train_dataset,
-                              batch_size=BATCH_SIZE,
-                              sampler = weighted_sampler)
+train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 # Instantiate our validation dataset
 validation_dataset =  BirdDataset(signals = data_validation['signal'].to_list(), 
@@ -245,10 +290,11 @@ validation_dataset =  BirdDataset(signals = data_validation['signal'].to_list(),
 validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False)
 
 # Instantiate our model
-model = models.resnet50(num_classes = 182)
-model.to(device)
+model = BirdClassifier(NUM_SPECIES).to(device)
+
+# Set our loss function and optimizer
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters())
+optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
 # Training loop
 print(f"Training on {len(train_dataset)} samples with {BATCH_SIZE} samples per batch.")
@@ -259,14 +305,6 @@ training_losses = [None]*NUM_EPOCHS
 validation_losses = [None]*NUM_EPOCHS
 
 torch.enable_grad() # Turn on the gradient
-
-################################################################################
-# SAVE AND REPORT train test split
-################################################################################
-
-# Save train test split
-data_train[['primary_label', 'filepath']].to_csv(f"{output_dir}/data_train.csv", index = False)
-data_validation[['primary_label', 'filepath']].to_csv(f"{output_dir}/data_validation.csv", index = False)
 
 ################################################################################
 # TRAINING LOOP
@@ -296,11 +334,7 @@ for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
         optimizer.step()
 
         # Update loss
-        running_loss += float(loss.item())
-
-    # Save checkpoint
-    if SAVE_CHECKPOINTS == True:
-        torch.save(model.state_dict(), f"{CHECKPOINT_DIR}{MODEL_NAME}/checkpoint_{epoch_num+1}.pt")
+        running_loss += loss.item()
 
     # Compute training loss
     if REPORT_TRAINING_LOSS_PER_EPOCH == True:    
@@ -314,29 +348,33 @@ for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
             inputs, labels = validation_data
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
-            validation_loss += float(criterion(outputs, labels).item())
+            validation_loss += criterion(outputs, labels).item()
         validation_losses[epoch_num] = validation_loss/len(validation_dataloader)
         model.train()
-
-    # Save losses
-    losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
-    cols = []
-    if REPORT_TRAINING_LOSS_PER_EPOCH == True:
-        cols += ["training_losses"]
-    if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
-        cols += ["validation_losses"]
-    if len(cols) > 0:
-        losses[cols].to_csv(f'{output_dir}/losses.csv', index = False)
 
 print('Finished Training')
 
 ################################################################################
-# SAVE AND REPORT 
+# SAVE AND REPORT
 ################################################################################
+
+# Save train test split
+data_train[['primary_label', 'filepath']].to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/data_train.csv", index = False)
+data_validation[['primary_label', 'filepath']].to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/data_validation.csv", index = False)
 
 # Save model
 if SAVE_AFTER_TRAINING == True:
     torch.save(model.state_dict(), f'{output_dir}/final.pt')
+
+# Save losses
+losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
+cols = []
+if REPORT_TRAINING_LOSS_PER_EPOCH == True:
+    cols += ["training_losses"]
+if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
+    cols += ["validation_losses"]
+if len(cols) > 0:
+    losses[cols].to_csv(f'{output_dir}/losses.csv', index = False)
 
 ################################################################################
 ################################################################################
