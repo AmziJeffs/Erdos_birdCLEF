@@ -141,7 +141,7 @@ def time_mask(spec, T=40):
 ################################################################################
 
 # Slice a sequence into segments
-def slices(seq, window_size = 160000, stride = None, align_left = True, return_scraps = False):
+def slices(seq, window_size = 160000, stride = None, align_left = True, return_scraps = True):
     # If one window is larger than the sequence, just return the scraps or nothing
     if window_size > len(seq):
         if return_scraps == True:
@@ -174,7 +174,7 @@ def slices(seq, window_size = 160000, stride = None, align_left = True, return_s
 # Note: signals and labels should be ordinary lists
 # Training boolean is used to decide whether to apply masks
 # Config should have the format of a dictionary
-class BirdDataset(Dataset):
+class DCaseData(Dataset):
     def __init__(self, signals, labels, training = True,
         config = {'use_mel': True, 'time_mask': True, 'freq_mask': True}):
         super().__init__()
@@ -218,10 +218,10 @@ class BirdDataset(Dataset):
 # ARCHITECTURE
 ################################################################################
 
-class BirdClassifier(nn.Module):
+class BirdCallDetector(nn.Module):
     ''' Full architecture from https://github.com/musikalkemist/pytorchforaudio/blob/main/10%20Predictions%20with%20sound%20classifier/cnn.py'''
-    def __init__(self, num_classes):
-        super(BirdClassifier, self).__init__()
+    def __init__(self):
+        super(BirdCallDetector, self).__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
@@ -266,18 +266,44 @@ class BirdClassifier(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2)
         )
+        self.conv5 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=128,
+                out_channels=128,
+                kernel_size=3,
+                stride=1,
+                padding=2
+            ),
+            nn.ReLU(),
+        )
+        self.conv6 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=128,
+                out_channels=128,
+                kernel_size=3,
+                stride=1,
+                padding=2
+            ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2)
+        )
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(28800, num_classes)
+        self.linear = nn.Linear(10368, 2)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, input_data):
         x = self.conv1(input_data)
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.conv6(x)
         x = self.flatten(x)
-        x = self.linear(x)
-        return x
-
+        logits = self.linear(x)
+        predictions = self.softmax(logits)
+        return predictions
+    
+    
 ################################################################################
 # TRAINING SETUP
 ################################################################################
@@ -296,25 +322,28 @@ output_dir.mkdir(parents=True, exist_ok=True)
 output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
 
 # Instantiate our training dataset
-train_dataset = BirdDataset(signals = data_train['signal'].to_list(), 
-                            labels = data_train['tensor_label'].to_list(),
-                            training = True)
+train_dataset = DCaseData(signals = dcase_train['signal'].to_list(), 
+                                labels = dcase_train['hasbird'].to_list(),
+                                training=True)
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 # Instantiate our validation dataset
-validation_dataset =  BirdDataset(signals = data_validation['signal'].to_list(), 
-                                  labels = data_validation['tensor_label'].to_list(),
-                                  training = False)
+validation_dataset =  DCaseData(signals = dcase_test['signal'].to_list(), 
+                                labels = dcase_test['hasbird'].to_list(),
+                                training = False)
 validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False)
 
 # Instantiate our model
-model = BirdClassifier(NUM_SPECIES).to(device)
+model = BirdCallDetector().to(device)
 
 # Set our loss function and optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
-# Training loop
+################################################################################
+# TRAINING LOOP
+################################################################################
+
 print(f"Training on {len(train_dataset)} samples with {BATCH_SIZE} samples per batch.")
 if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
     print(f"Validating on {len(validation_dataset)} samples at the end of each epoch.")
@@ -323,10 +352,6 @@ training_losses = [None]*NUM_EPOCHS
 validation_losses = [None]*NUM_EPOCHS
 
 torch.enable_grad() # Turn on the gradient
-
-################################################################################
-# TRAINING LOOP
-################################################################################
 
 for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
 
@@ -374,29 +399,24 @@ for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
         validation_losses[epoch_num] = validation_loss/len(validation_dataloader)
         model.train()
 
+    # Save losses
+    losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
+    cols = []
+    if REPORT_TRAINING_LOSS_PER_EPOCH == True:
+        cols += ["training_losses"]
+    if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
+        cols += ["validation_losses"]
+    if len(cols) > 0:
+        losses[cols].to_csv(f'{output_dir}/losses.csv', index = False)
+
 print('Finished Training')
 
 ################################################################################
 # SAVE AND REPORT
 ################################################################################
 
-# Save train test split
-data_train[['primary_label', 'filepath']].to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/data_train.csv", index = False)
-data_validation[['primary_label', 'filepath']].to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/data_validation.csv", index = False)
-
-# Save model
 if SAVE_AFTER_TRAINING == True:
     torch.save(model.state_dict(), f'{output_dir}/final.pt')
-
-# Save losses
-losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
-cols = []
-if REPORT_TRAINING_LOSS_PER_EPOCH == True:
-    cols += ["training_losses"]
-if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
-    cols += ["validation_losses"]
-if len(cols) > 0:
-    losses[cols].to_csv(f'{output_dir}/losses.csv', index = False)
 
 ################################################################################
 ################################################################################
