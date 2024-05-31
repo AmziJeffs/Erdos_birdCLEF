@@ -3,7 +3,7 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = False # Set to True to train and validate on 10% of the data, for quick funcitonality tests etc
+ABRIDGED_RUN = False  # Set to True to train and validate on 10% of the data, for quick funcitonality tests etc
 SAVE_AFTER_TRAINING = True # Save the model when you are done
 SAVE_CHECKPOINTS = True # Save the model after every epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
@@ -18,7 +18,7 @@ LEARNING_RATE = 0.001 # Learning rate for our optimizer
 DATA_DIR = "../data/"
 AUDIO_DIR_DCASE = DATA_DIR + "ff1010bird_wav/"
 CHECKPOINT_DIR = "checkpoints/" # Checkpoints, models, and training data will be saved here
-MODEL_NAME = "BIRDCALL_DETECTION_DCASE_RANDOM_SAMPLE"
+MODEL_NAME = "BIRDCALL_DETECTION_DCASE_ALL_DATA"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
@@ -37,12 +37,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 import librosa
+import random
 import os
 import IPython.display as ipd
 from sklearn.model_selection import train_test_split
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from pathlib import Path
-import random
 
 # Torch imports
 import torch
@@ -82,7 +82,6 @@ dcase_train, dcase_test = train_test_split(dcase, test_size = 0.2, random_state=
 if ABRIDGED_RUN == True:
     dcase_train = dcase_train.sample(int(len(dcase_train)*0.1))
     dcase_test = dcase_test.sample(int(len(dcase_train)*0.1))
-
 
 ################################################################################
 # PREPROCESSING FUNCTIONS
@@ -137,33 +136,66 @@ def time_mask(spec, T=40):
 ################################################################################
 ################################################################################
 ################################################################################
-
 ################################################################################
 # DATASET CLASS
 ################################################################################
 
+# Slice a sequence into segments
+def slices(seq, window_size = 160000, stride = None, align_left = True, return_scraps = False):
+    # If one window is larger than the sequence, just return the scraps or nothing
+    if window_size > len(seq):
+        if return_scraps == True:
+            return [seq]
+        else:
+            return []
+
+    # If stride is None, it defaults to window_size
+    if stride == None:
+        stride = window_size
+
+    index_slices = []
+    left_pointer = 0
+    while left_pointer + window_size <= len(seq):
+        index_slices += [[left_pointer, left_pointer + window_size]]
+        left_pointer += stride
+
+    if align_left == False:
+        offset = len(seq)-(left_pointer-stride)-window_size
+        index_slices = [[a+offset, b+offset] for [a,b] in index_slices]
+
+    if return_scraps == True and left_pointer + window_size > len(seq):
+        if align_left == True:
+            index_slices += [[left_pointer, len(seq)]]
+        else:
+            index_slices += [[0, len(seq) - left_pointer]]
+
+    return [seq[a:b] for [a,b] in index_slices]
+
 # Note: signals and labels should be ordinary lists
 # Training boolean is used to decide whether to apply masks
 # Config should have the format of a dictionary
-class DCaseData(Dataset):
+class BirdDataset(Dataset):
     def __init__(self, signals, labels, training = True,
         config = {'use_mel': True, 'time_mask': True, 'freq_mask': True}):
         super().__init__()
         self.training = training
         self.config = config
         print(f'Preprocessing {"training" if training else "validation"} data\n')
-        self.labels = labels
-        self.processed_clips, self.labels = self.process(signals)
-        
-    def process(self, signals):
+        self.processed_clips, self.labels = self.process(signals, labels)
+
+    def process(self, signals, labels):
         results = []
+        new_labels = []
         for i, signal in enumerate(tqdm(signals, total = len(signals), leave = False)):
-            # Uniformize to at least 5 seconds
+            # Uniformize to 5 seconds
             if signal.shape[1] < SAMPLE_RATE * SAMPLE_LENGTH:
                 pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(signal)
                 signal = torch.nn.functional.pad(signal, (0, pad_length))
-            results += [signal]
-        return results
+            # Cut signal into 5 second chunks to save
+            for clip in slices(signal.squeeze()):
+                results += [clip.unsqueeze(0)]
+                new_labels += [labels[i]]
+        return results, new_labels
 
     def __len__(self):
         return len(self.processed_clips)
@@ -171,18 +203,9 @@ class DCaseData(Dataset):
     def __getitem__(self, index):
         # Process clip to tensor
         x = self.processed_clips[index]
-
-        # Get a random 5-second clip from the whole sample
-        start = np.random.randint(x.shape[1]-SAMPLE_RATE*SAMPLE_LENGTH+1)
-        x = x[:, start:start + SAMPLE_RATE*SAMPLE_LENGTH]
-
-        # Process
         x = spectrogram_transform(x)
         if self.config['use_mel']:
             x = mel_spectrogram_transform(x)
-        if self.training:
-            exponent = np.random.uniform(low = 0.5, high = 3)
-            x = torch.pow(x, exponent)
         x = db_scaler(x)
         if self.config['time_mask'] and self.training:
             x = time_mask(x)
@@ -191,18 +214,14 @@ class DCaseData(Dataset):
         x = resize(x)
         return x, self.labels[index]
 
-
-    
-
-    
 ################################################################################
 # ARCHITECTURE
 ################################################################################
 
-class BirdCallDetector(nn.Module):
+class BirdClassifier(nn.Module):
     ''' Full architecture from https://github.com/musikalkemist/pytorchforaudio/blob/main/10%20Predictions%20with%20sound%20classifier/cnn.py'''
-    def __init__(self):
-        super(BirdCallDetector, self).__init__()
+    def __init__(self, num_classes):
+        super(BirdClassifier, self).__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
@@ -247,43 +266,18 @@ class BirdCallDetector(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2)
         )
-        self.conv5 = nn.Sequential(
-            nn.Conv2d(
-                in_channels=128,
-                out_channels=128,
-                kernel_size=3,
-                stride=1,
-                padding=2
-            ),
-            nn.ReLU(),
-        )
-        self.conv6 = nn.Sequential(
-            nn.Conv2d(
-                in_channels=128,
-                out_channels=128,
-                kernel_size=3,
-                stride=1,
-                padding=2
-            ),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2)
-        )
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(10368, 2)
-        self.softmax = nn.Softmax(dim=1)
+        self.linear = nn.Linear(28800, num_classes)
 
     def forward(self, input_data):
         x = self.conv1(input_data)
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
-        x = self.conv5(x)
-        x = self.conv6(x)
         x = self.flatten(x)
-        logits = self.linear(x)
-        predictions = self.softmax(logits)
-        return predictions
-    
+        x = self.linear(x)
+        return x
+
 ################################################################################
 # TRAINING SETUP
 ################################################################################
@@ -294,40 +288,33 @@ if torch.cuda.is_available():
     device = "cuda"
 else:
     device = "cpu"
-
-# Set model name if not set.
-# Defaults to a timestamp, YYYY-MM-DD_HH_MM_SS
-if MODEL_NAME == None:
-    MODEL_NAME = 'birdcall_detection_'+str(pd.Timestamp.now()).replace(" ", "_").replace(":", "-").split(".")[0]
+print(f"Using {device} for training")
 
 # Create a saving directory if needed
-if SAVE_AFTER_TRAINING or SAVE_CHECKPOINTS or REPORT_TRAINING_LOSS_PER_EPOCH or REPORT_VALIDATION_LOSS_PER_EPOCH:
-    output_dir = Path(f'{CHECKPOINT_DIR}{MODEL_NAME}')
-    output_dir.mkdir(parents=True, exist_ok=True)
+output_dir = Path(f'{CHECKPOINT_DIR}{MODEL_NAME}')
+output_dir.mkdir(parents=True, exist_ok=True)
+output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
 
 # Instantiate our training dataset
-train_dataset = DCaseData(signals = dcase_train['signal'].to_list(), 
-                                labels = dcase_train['hasbird'].to_list(),
-                                training=True)
+train_dataset = BirdDataset(signals = data_train['signal'].to_list(), 
+                            labels = data_train['tensor_label'].to_list(),
+                            training = True)
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 # Instantiate our validation dataset
-validation_dataset =  DCaseData(signals = dcase_test['signal'].to_list(), 
-                                labels = dcase_test['hasbird'].to_list(),
-                                training = False)
+validation_dataset =  BirdDataset(signals = data_validation['signal'].to_list(), 
+                                  labels = data_validation['tensor_label'].to_list(),
+                                  training = False)
 validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False)
 
 # Instantiate our model
-model = BirdCallDetector().to(device)
+model = BirdClassifier(NUM_SPECIES).to(device)
 
 # Set our loss function and optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
-################################################################################
-# TRAINING LOOP
-################################################################################
-
+# Training loop
 print(f"Training on {len(train_dataset)} samples with {BATCH_SIZE} samples per batch.")
 if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
     print(f"Validating on {len(validation_dataset)} samples at the end of each epoch.")
@@ -336,6 +323,10 @@ training_losses = [None]*NUM_EPOCHS
 validation_losses = [None]*NUM_EPOCHS
 
 torch.enable_grad() # Turn on the gradient
+
+################################################################################
+# TRAINING LOOP
+################################################################################
 
 for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
 
@@ -383,21 +374,37 @@ for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
         validation_losses[epoch_num] = validation_loss/len(validation_dataloader)
         model.train()
 
-    # Save losses
-    losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
-    cols = []
-    if REPORT_TRAINING_LOSS_PER_EPOCH == True:
-        cols += ["training_losses"]
-    if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
-        cols += ["validation_losses"]
-    if len(cols) > 0:
-        losses[cols].to_csv(f'{output_dir}/losses.csv', index = False)
-
 print('Finished Training')
 
 ################################################################################
-# SAVE AND REPORT 
+# SAVE AND REPORT
 ################################################################################
 
+# Save train test split
+data_train[['primary_label', 'filepath']].to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/data_train.csv", index = False)
+data_validation[['primary_label', 'filepath']].to_csv(f"{CHECKPOINT_DIR}{MODEL_NAME}/data_validation.csv", index = False)
+
+# Save model
 if SAVE_AFTER_TRAINING == True:
     torch.save(model.state_dict(), f'{output_dir}/final.pt')
+
+# Save losses
+losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
+cols = []
+if REPORT_TRAINING_LOSS_PER_EPOCH == True:
+    cols += ["training_losses"]
+if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
+    cols += ["validation_losses"]
+if len(cols) > 0:
+    losses[cols].to_csv(f'{output_dir}/losses.csv', index = False)
+
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
