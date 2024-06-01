@@ -17,7 +17,11 @@ In this project we explore using passive acoustic monitoring (PAM) combined with
 
 - `all scripts` folder contains all possible 
 - `data` folder contains the training metadata. .py scripts in the scripts folders can be ran locally after populating the `data` folder with the official training audio data. 
-- `sample scripts` folder contains scripts used for exploratory data analysis (EDA), a baseline 2 layer CNN model and also an improved 6 layer CNN model with improved data augmentation. 
+- `sample scripts` folder contains sample scripts showcasing our work. Included are 
+    - [EDAbaseline.ipynb](/sample%20scripts/EDAbaseline.ipynb) for exploratory data analysis and a simple training pipeline.
+    - [baseline.ipynb](/sample%20scripts/baseline.ipynb) and [baseline.py](/sample%20scripts/baseline.py) for a two-layer baseline model with minimal preprocessing. 
+    - [6layerNN.py](/sample%20scripts/) for a six-layer CNN model with improved preprocessing.
+    - [convnext.py](/sample%20scripts/convnext.py) and [resnet.py](/sample%20scripts/resnet.py) for transfer learning with ResNet and ConvNeXT. 
 
 ## Description of dataset
 
@@ -29,6 +33,15 @@ The metadata for the training audio samples can be found under the [`data`](data
 ## Evaluation metric
 
 The model is evaluated using a macro-averaged ROC-AUC metric on a hidden testing set provided by the organizers; see [the official documentation](https://www.kaggle.com/competitions/birdclef-2024/overview/evaluation) for more details. 
+
+## Progress 
+- [x] Exploratory data analysis
+- [x] Building baseline model 
+- [x] Improving baseline model 
+- [x] Submission for Erdös institute project showcase (deadline 6/1/24) 
+- [ ] Optimizing model performance
+- [ ] Submission for Kaggle competition (deadline 6/10/24 )
+
 
 ## Exploratory data analysis
 
@@ -48,3 +61,5 @@ The model is evaluated using a macro-averaged ROC-AUC metric on a hidden testing
 We would like to thank the organizers and the associated organizations of the BirdCLEF 2024 competition for hosting the competition. We would like to thank the Erdös institute for providing the authors the opportunity to work on this project as part of the Erdös institute Data Science Bootcamp. We would also like to thank Nuno Chagas and the Department of Mathematical Sciences at Carnegie Mellon University for providing computing support for the project. 
 
 ## References 
+
+
