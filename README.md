@@ -24,7 +24,7 @@ In this project we explore using passive acoustic monitoring (PAM) combined with
     - [convnext.py](/sample%20scripts/convnext.py) and [resnet.py](/sample%20scripts/resnet.py) for transfer learning with ResNet and ConvNeXT. 
 
 #### Remark
-The scripts are written to be ran on a remote cluster provided by the Department of Mathematics at Carnegie Mellon University. As written, the training data is loaded into memory to speed up runtime performance, which requires significant RAM usage. Simple modifications can be made for the scripts to be utilized locally. 
+The scripts are written to be ran on a remote cluster with considerable computing power. As written, the training data is loaded into memory to speed up runtime performance, which requires significant RAM usage. Simple modifications can be made for the scripts to be utilized locally. 
 ## Description of dataset
 
 We use the dataset provided by the [BirdCLEF 2024 competition](https://www.kaggle.com/competitions/birdclef-2024), hosted on Kaggle. We are asked to train a model reporting probabilities of the presence of 182 given bird species in hidden test set of ~1100 audio clips; each test clip contains potentially multiple bird calls. 
