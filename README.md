@@ -56,7 +56,8 @@ We very quickly realized that there is an imbalance in the training data by spec
 
 ## Mel Spectrogram generation and data augmentation
 We used the `torchaudio` package supplied by PyTorch to transform the training audio clips to mel spectrograms as inputs into convolutional neural networks. 
-![alt text](images/output5.png)
+
+![alt text](images/output5.png)  
 
 We later found that data augmentation techniques such as applying time and frequency masks and increasing/decreasing contrast via exponentiation help the models generalize better on test data. 
 ![alt text](images/output6.png)
