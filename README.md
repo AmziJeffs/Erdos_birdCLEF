@@ -1,4 +1,4 @@
-# Bird Species identification on audio samples using CNNs (BirdCLEF 2024)
+# Bird species identification on audio samples using CNNs (BirdCLEF 2024)
 
 
 ## Authors
