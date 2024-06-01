@@ -67,9 +67,11 @@ Our baseline architecture is a simple two-layer convolutional neural network tha
 
 ![alt text](images/1.png)
 
-We found that baseline and similar models have a tendency to overfit on training data, and improving data preprocessing and model architecture significantly reduced overfitting. 
+We found that baseline and similar models have a tendency to overfit on training data.
 
 ![alt text](images/2_v_4_layers.png)
+
+Improving data preprocessing and model architecture significantly reduced overfitting. 
 
 ![alt text](images/60epochs.png)
 We are currently working on further optimizing data preprocessing and the neural network aritecture to optimize performance.  
