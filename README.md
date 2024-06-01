@@ -39,7 +39,7 @@ The model is evaluated using a macro-averaged ROC-AUC metric on a hidden testing
 - [x] Exploratory data analysis
 - [x] Building baseline model 
 - [x] Improving baseline model 
-- [x] Submission for Erdös institute project showcase (deadline 6/1/24) 
+- [x] Submission for Erdös institute capstone prooject (deadline 6/1/24) 
 - [ ] Improving data preprocessing and augmentation, model architecture and inference speed
 - [ ] Submission for Kaggle competition (deadline 6/10/24)
 
