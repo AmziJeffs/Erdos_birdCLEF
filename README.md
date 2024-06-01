@@ -2,16 +2,16 @@
 
 
 ## Authors
-[Amzi Jeffs](https://github.com/AmziJeffs)  
+[Amzi Jeffs](https://github.com/AmziJeffs)    
 [Junichi Koganemaru](https://github.com/jkoganem)  
 [Salil Singh](https://github.com/sllsnghlrns)  
-[Ashwin T.A.N.](https://github.com/ashwintan1)     
+[Ashwin Tarikere](https://github.com/ashwintan1)     
 
 ## Overview
 
 Climate change plays a devastating role in the destruction of natural habitats and the global decline of biodiversity. One way of understanding these effects is by monitoring bird populations as they are highly migratory and have diverse habitual needs. However, traditional methods can be costly and logistically challenging to conduct at large scales. 
 
-In this project we explore using passive acoustic monitoring (PAM) combined with deep learning methods to identify bird specifies using audio samples in the Western Ghats of India. The broader goal of this project is to contribute to the growing literature of deep learning approaches to tackling issues brought by climate change. 
+In this project we explore using passive acoustic monitoring (PAM) combined with deep learning methods to identify bird specifies using audio samples in the Western Ghats of India. The broader goal of this project is for the authors to learn to use [PyTorch](https://pytorch.org) and to contribute to the growing literature of deep learning approaches to tackling issues brought by climate change. 
 
 ## Structure of repository
 
@@ -23,7 +23,7 @@ In this project we explore using passive acoustic monitoring (PAM) combined with
 
 We use the dataset provided by the [BirdCLEF 2024 competition](https://www.kaggle.com/competitions/birdclef-2024), hosted on Kaggle. We are asked to train a model reporting probabilities of the presence of 182 given bird species in hidden test set of ~1100 audio clips; each test clip contains potentially multiple bird calls. 
 
-The metadata for the training audio samples can be found under the [data folder](data/test_metadata.csv). The rest of the data are available on [the official competition webpage](https://www.kaggle.com/competitions/birdclef-2024/data).   
+The metadata for the training audio samples can be found under the [`data`](data/test_metadata.csv) folder. The rest of the data are available on [the official competition webpage](https://www.kaggle.com/competitions/birdclef-2024/data).   
  
 
 ## Evaluation metric
@@ -35,7 +35,7 @@ The model is evaluated using a macro-averaged ROC-AUC metric on a hidden testing
 
 ## Model architecture 
 
-We implemented a ... 
+
 
 
 
