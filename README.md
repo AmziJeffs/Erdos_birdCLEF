@@ -16,3 +16,7 @@ Climate change plays a devastating role in the destruction of natural habitats a
 We use a dataset provided by the [BirdCLEF 2024 competition](https://www.kaggle.com/competitions/birdclef-2024).
 
 ## Evaluation metric
+
+
+
+##

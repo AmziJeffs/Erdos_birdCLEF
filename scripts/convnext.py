@@ -29,7 +29,7 @@ MAX_SAMPLE_LENGTH = 60 # Trim every sample to <= 60 seconds
 MIN_SAMPLE_LENGTH_NR = 10
 
 IMAGE_LENGTH = 256
-
+NUM_WORKERS = 16
 ################################################################################
 # IMPORTS
 ################################################################################
@@ -200,7 +200,8 @@ class BirdDataset(Dataset):
         x = resize(x)
         return x.expand(3, IMAGE_LENGTH, IMAGE_LENGTH), self.labels[index]
     
-    ################################################################################
+    
+################################################################################
 # TRAINING SETUP
 ################################################################################
 
@@ -223,13 +224,13 @@ output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
 train_dataset = BirdDataset(signals = data_train['signal'].to_list(), 
                             labels = data_train['tensor_label'].to_list(),
                             training = True)
-train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers = 4)
+train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers = NUM_WORKERS)
 
 # Instantiate our validation dataset
 validation_dataset =  BirdDataset(signals = data_validation['signal'].to_list(), 
                                   labels = data_validation['tensor_label'].to_list(),
                                   training = False)
-validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False, num_workers = 4)
+validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False, num_workers = NUM_WORKERS)
 
 # Instantiate our model
 #model = models.convnext_base(weights = 'DEFAULT')
