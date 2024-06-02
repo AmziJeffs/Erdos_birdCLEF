@@ -15,7 +15,7 @@ In this project we explore using passive acoustic monitoring (PAM) combined with
 
 ## Structure of repository
 
-- `all scripts` folder contains all possible 
+- `all scripts` folder contains scripts for all the architectures and preprocessing steps that we have been considering.  
 - `data` folder contains the training metadata. .py scripts in the scripts folders can be ran locally after populating the `data` folder with the official training audio data. 
 - `sample scripts` folder contains sample scripts showcasing our work. Included are 
     - [EDAbaseline.ipynb](/sample%20scripts/EDAbaseline.ipynb) for exploratory data analysis and a simple training pipeline.
