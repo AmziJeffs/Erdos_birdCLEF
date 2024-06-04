@@ -10,7 +10,7 @@ REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and 
 REPORT_VALIDATION_LOSS_PER_EPOCH = True # Lets us make a nice learning curve after training
 
 # Training hyperparameters
-BATCH_SIZE = 256 # Number of samples per batch while training our network
+BATCH_SIZE = 64 # Number of samples per batch while training our network
 NUM_EPOCHS = 20 # Number of epochs to train our network
 LEARNING_RATE = 0.001 # Learning rate for our optimizer
 
