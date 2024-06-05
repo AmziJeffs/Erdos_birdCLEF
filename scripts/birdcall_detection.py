@@ -340,7 +340,7 @@ model = BirdCallIdentifier(2).to(device)
 
 
 # Set our loss function and optimizer
-criterion = nn.CrossEntropyLoss()
+criterion = torcheval.metrics.BinaryAccuracy()
 optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
 
