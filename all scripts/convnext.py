@@ -12,7 +12,7 @@ REPORT_VALIDATION_LOSS_PER_EPOCH = True # Lets us make a nice learning curve aft
 
 # Training hyperparameters
 BATCH_SIZE = 16 # Number of samples per batch while training our network
-NUM_EPOCHS = 60 # Number of epochs to train our network
+NUM_EPOCHS = 100 # Number of epochs to train our network
 LEARNING_RATE = 0.0001 # Learning rate for our optimizer
 
 # Directories
@@ -29,7 +29,7 @@ MAX_SAMPLE_LENGTH = 60 # Trim every sample to <= 60 seconds
 MIN_SAMPLE_LENGTH_NR = 10
 
 IMAGE_LENGTH = 256
-NUM_WORKERS = 16
+NUM_WORKERS = 32
 ################################################################################
 # IMPORTS
 ################################################################################
@@ -234,7 +234,7 @@ validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=Fal
 
 # Instantiate our model
 #model = models.convnext_base(weights = 'DEFAULT')
-model = models.convnext_base(weights = 'DEFAULT')
+model = models.convnext_tiny(weights = 'DEFAULT')
 model.classifier[2] = nn.Linear(model.classifier[2].in_features, NUM_SPECIES, bias=True, dtype=torch.float32)
 model.to(device)
 

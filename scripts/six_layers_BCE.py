@@ -3,26 +3,38 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = False # Set to True to train and validate on 10% of the data, for quick funcitonality tests etc
+ABRIDGED_RUN = False
 SAVE_AFTER_TRAINING = True # Save the model when you are done
-SAVE_CHECKPOINTS = True # Save the model after every epoch
+SAVE_CHECKPOINTS = True # Save the model after ever epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
 REPORT_VALIDATION_LOSS_PER_EPOCH = True # Lets us make a nice learning curve after training
 
 # Training hyperparameters
 BATCH_SIZE = 64 # Number of samples per batch while training our network
-NUM_EPOCHS = 20 # Number of epochs to train our network
+NUM_EPOCHS = 60 # Number of epochs to train our network
 LEARNING_RATE = 0.001 # Learning rate for our optimizer
 
 # Directories
-DATA_DIR = "../data/"
-AUDIO_DIR_DCASE = DATA_DIR + "wav/"
 CHECKPOINT_DIR = "checkpoints/" # Checkpoints, models, and training data will be saved here
-MODEL_NAME = "BIRDCALL_DETECTION_DCASE_RANDOM_SAMPLE"
+DATA_DIR = "data/"
+AUDIO_DIR = DATA_DIR + "train_audio/"
+
+# We use the following pipeline (TODO)
+# 1. Cut each clip into 5 second segments, with stride 2.5 seconds
+# 2. Use a nocall detector to throw away the segments that don't
+#    contain a bird call
+# 3. When asking for a clip from the dataset, we
+#    a. Make Mel spec
+#    b. Apply random power 0.5 to 3
+#    c. Frequency and time mask
+# 4. We use weighted random sampling, by a count from each class
+MODEL_NAME = "SIX_LAYERS_BCE"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
 SAMPLE_LENGTH = 5 # Duration we want to crop our audio to
+NUM_SPECIES = 182 # Number of bird species we need to label
+MAX_SAMPLE_LENGTH = 60 # Trim every sample to <= 60 seconds
 
 ################################################################################
 # IMPORTS
@@ -37,12 +49,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 import librosa
+import random
 import os
 import IPython.display as ipd
 from sklearn.model_selection import train_test_split
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from pathlib import Path
-import random
 
 # Torch imports
 import torch
@@ -63,25 +75,36 @@ print("Done")
 # LOAD DATA
 ################################################################################
 
-dcase = pd.read_csv(DATA_DIR+'ff1010bird_metadata_2018.csv')
+data = pd.read_csv(DATA_DIR+"train_metadata.csv")
+data['filepath'] = AUDIO_DIR + data['filename']
 
-# Create a filepath column
-dcase['filepath'] = AUDIO_DIR_DCASE + dcase['itemid'].astype(str)+'.wav'
+# We only need the filepath and species label
+data = data[['filepath', 'primary_label']]
+
+# Replace string labels by tensors whose entries are dummies
+species = data['primary_label'].unique()
+species_to_index = {species[i]:i for i in range(len(species))}
+data['index_label'] = data['primary_label'].apply(lambda x: species_to_index[x])
+data['tensor_label'] = pd.Series(pd.get_dummies(data['primary_label']).astype(int).values.tolist()).apply(lambda x: torch.Tensor(x))
+data.sample(5)
+
+# Use 100 rows of data for quick runs to test functionalities
+if ABRIDGED_RUN == True:
+    data = data.sample(10)
 
 print("Loading audio signals into memory")
 tqdm.pandas()
 def filepath_to_signal(filepath):
     sample, _ = torchaudio.load(filepath)
     return sample
-dcase['signal'] = dcase['filepath'].progress_apply(filepath_to_signal)
+data['signal'] = data['filepath'].progress_apply(filepath_to_signal)
 print("Done")
 
-# Train test split, stratified by 'hasbird'
-dcase_train, dcase_test = train_test_split(dcase, test_size = 0.2, random_state=123, stratify=dcase['hasbird'])
-
+# Train test split, stratified by species
+stratify = data['primary_label']
 if ABRIDGED_RUN == True:
-    dcase_train = dcase_train.sample(int(len(dcase_train)*0.1))
-    dcase_test = dcase_test.sample(int(len(dcase_train)*0.1))
+    stratify = None
+data_train, data_validation = train_test_split(data, test_size = 0.2, stratify=stratify)
 
 
 ################################################################################
@@ -145,25 +168,26 @@ def time_mask(spec, T=40):
 # Note: signals and labels should be ordinary lists
 # Training boolean is used to decide whether to apply masks
 # Config should have the format of a dictionary
-class DCaseData(Dataset):
+class BirdDataset(Dataset):
     def __init__(self, signals, labels, training = True,
         config = {'use_mel': True, 'time_mask': True, 'freq_mask': True}):
         super().__init__()
         self.training = training
         self.config = config
         print(f'Preprocessing {"training" if training else "validation"} data\n')
-        self.labels = labels
-        self.processed_clips, self.labels = self.process(signals)
-        
-    def process(self, signals):
+        self.processed_clips, self.labels = self.process(signals, labels)
+
+    def process(self, signals, labels):
         results = []
+        new_labels = []
         for i, signal in enumerate(tqdm(signals, total = len(signals), leave = False)):
             # Uniformize to at least 5 seconds
             if signal.shape[1] < SAMPLE_RATE * SAMPLE_LENGTH:
                 pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(signal)
                 signal = torch.nn.functional.pad(signal, (0, pad_length))
             results += [signal]
-        return results
+            new_labels += [labels[i]]
+        return results, new_labels
 
     def __len__(self):
         return len(self.processed_clips)
@@ -191,18 +215,14 @@ class DCaseData(Dataset):
         x = resize(x)
         return x, self.labels[index]
 
-
-    
-
-    
 ################################################################################
 # ARCHITECTURE
 ################################################################################
 
-class BirdCallDetector(nn.Module):
+class BirdClassifier(nn.Module):
     ''' Full architecture from https://github.com/musikalkemist/pytorchforaudio/blob/main/10%20Predictions%20with%20sound%20classifier/cnn.py'''
-    def __init__(self):
-        super(BirdCallDetector, self).__init__()
+    def __init__(self, num_classes):
+        super(BirdClassifier, self).__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
@@ -265,12 +285,10 @@ class BirdCallDetector(nn.Module):
                 stride=1,
                 padding=2
             ),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2)
+            nn.ReLU()
         )
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(10368, 2)
-        self.softmax = nn.Softmax(dim=1)
+        self.linear = nn.Linear(46208, num_classes)
 
     def forward(self, input_data):
         x = self.conv1(input_data)
@@ -280,10 +298,17 @@ class BirdCallDetector(nn.Module):
         x = self.conv5(x)
         x = self.conv6(x)
         x = self.flatten(x)
-        logits = self.linear(x)
-        predictions = self.softmax(logits)
-        return predictions
-    
+        x = self.linear(x)
+        return x
+
+################################################################################
+# WEIGHTED RANDOM SAMPLER SETUP
+################################################################################
+
+label_counts = data_train['primary_label'].value_counts() # TODO, count from dataset
+weights = data_train['primary_label'].apply(lambda x: 1/label_counts.loc[x])
+weighted_sampler = torch.utils.data.WeightedRandomSampler(weights.to_list(), len(weights))
+
 ################################################################################
 # TRAINING SETUP
 ################################################################################
@@ -294,40 +319,35 @@ if torch.cuda.is_available():
     device = "cuda"
 else:
     device = "cpu"
-
-# Set model name if not set.
-# Defaults to a timestamp, YYYY-MM-DD_HH_MM_SS
-if MODEL_NAME == None:
-    MODEL_NAME = 'birdcall_detection_'+str(pd.Timestamp.now()).replace(" ", "_").replace(":", "-").split(".")[0]
+print(f"Using {device} for training")
 
 # Create a saving directory if needed
-if SAVE_AFTER_TRAINING or SAVE_CHECKPOINTS or REPORT_TRAINING_LOSS_PER_EPOCH or REPORT_VALIDATION_LOSS_PER_EPOCH:
-    output_dir = Path(f'{CHECKPOINT_DIR}{MODEL_NAME}')
-    output_dir.mkdir(parents=True, exist_ok=True)
+output_dir = Path(f'{CHECKPOINT_DIR}{MODEL_NAME}')
+output_dir.mkdir(parents=True, exist_ok=True)
+output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
 
 # Instantiate our training dataset
-train_dataset = DCaseData(signals = dcase_train['signal'].to_list(), 
-                                labels = dcase_train['hasbird'].to_list(),
-                                training=True)
-train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+train_dataset = BirdDataset(signals = data_train['signal'].to_list(), 
+                            labels = data_train['tensor_label'].to_list(),
+                            training = True)
+train_dataloader = DataLoader(train_dataset,
+                              batch_size=BATCH_SIZE,
+                              sampler = weighted_sampler)
 
 # Instantiate our validation dataset
-validation_dataset =  DCaseData(signals = dcase_test['signal'].to_list(), 
-                                labels = dcase_test['hasbird'].to_list(),
-                                training = False)
+validation_dataset =  BirdDataset(signals = data_validation['signal'].to_list(), 
+                                  labels = data_validation['tensor_label'].to_list(),
+                                  training = False)
 validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False)
 
 # Instantiate our model
-model = BirdCallDetector().to(device)
+model = BirdClassifier(NUM_SPECIES).to(device)
 
 # Set our loss function and optimizer
-criterion = nn.CrossEntropyLoss()
+criterion = nn.BCEWithLogitsLoss(reduction='sum')
 optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
-################################################################################
-# TRAINING LOOP
-################################################################################
-
+# Training loop
 print(f"Training on {len(train_dataset)} samples with {BATCH_SIZE} samples per batch.")
 if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
     print(f"Validating on {len(validation_dataset)} samples at the end of each epoch.")
@@ -336,6 +356,18 @@ training_losses = [None]*NUM_EPOCHS
 validation_losses = [None]*NUM_EPOCHS
 
 torch.enable_grad() # Turn on the gradient
+
+################################################################################
+# SAVE AND REPORT train test split
+################################################################################
+
+# Save train test split
+data_train[['primary_label', 'filepath']].to_csv(f"{output_dir}/data_train.csv", index = False)
+data_validation[['primary_label', 'filepath']].to_csv(f"{output_dir}/data_validation.csv", index = False)
+
+################################################################################
+# TRAINING LOOP
+################################################################################
 
 for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
 
@@ -375,6 +407,7 @@ for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
     if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
         validation_loss = 0.0
         model.eval()
+        torch.no_grad()
         for validation_data in validation_dataloader:
             inputs, labels = validation_data
             inputs, labels = inputs.to(device), labels.to(device)
@@ -382,6 +415,7 @@ for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
             validation_loss += criterion(outputs, labels).item()
         validation_losses[epoch_num] = validation_loss/len(validation_dataloader)
         model.train()
+        torch.enable_grad()
 
     # Save losses
     losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
@@ -399,5 +433,17 @@ print('Finished Training')
 # SAVE AND REPORT 
 ################################################################################
 
+# Save model
 if SAVE_AFTER_TRAINING == True:
     torch.save(model.state_dict(), f'{output_dir}/final.pt')
+
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################

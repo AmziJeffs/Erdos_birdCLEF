@@ -16,7 +16,7 @@ LEARNING_RATE = 0.001 # Learning rate for our optimizer
 
 # Directories
 DATA_DIR = "../data/"
-AUDIO_DIR_DCASE = DATA_DIR + "ff1010bird_wav/"
+AUDIO_DIR_DCASE = DATA_DIR + "wav/"
 CHECKPOINT_DIR = "checkpoints/" # Checkpoints, models, and training data will be saved here
 MODEL_NAME = "BIRDCALL_DETECTION_DCASE_ALL_DATA"
 
