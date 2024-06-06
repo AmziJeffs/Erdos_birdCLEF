@@ -4,5 +4,7 @@ data/unlabeled_soundscapes/*
 data/ff1010bird_wav/*
 data/eBird_Taxonomy_v2021.csv
 data/sample_submission.csv
+data/wav
+all\ scripts/checkpoints
 checkpoints/
 .DS_Store
