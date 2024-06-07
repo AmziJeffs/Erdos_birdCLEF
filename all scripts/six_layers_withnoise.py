@@ -27,7 +27,7 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #    clip, with freq/time masking and random power.
 #  - Validate on a random 5-second window of every clip without
 #    freq/time masking or random power
-MODEL_NAME = "CE_0-60_BS32_dropout_NOISE"
+MODEL_NAME = "CE_0-60_BS32_dropout_NOISE-1_2"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
@@ -218,7 +218,7 @@ class BirdDataset(Dataset):
 
         # Add noise
         if self.training:
-            x = add_noise(x, 10**np.random.uniform(low = 0, high = 3))
+            x = add_noise(x, np.random.uniform(low = -1, high = 2))
 
         # Process
         x = spectrogram_transform(x)
