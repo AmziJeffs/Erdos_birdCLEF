@@ -27,13 +27,17 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #    clip, with freq/time masking and random power.
 #  - Validate on a random 5-second window of every clip without
 #    freq/time masking or random power
-MODEL_NAME = "CE_0-60_BS32_dropout_NOISE-1_2"
+MODEL_NAME = "CE_0-60_BS32_dropout_NOISE_-10_20"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
 SAMPLE_LENGTH = 5 # Duration we want to crop our audio to
 NUM_SPECIES = 182 # Number of bird species we need to label
 MAX_SAMPLE_LENGTH = 60 # Trim every sample to <= 60 seconds
+
+# Min and max signal to noise ratio
+MAX_SNR = 20
+MIN_SNR = -10
 
 ################################################################################
 # IMPORTS
@@ -218,7 +222,7 @@ class BirdDataset(Dataset):
 
         # Add noise
         if self.training:
-            x = add_noise(x, np.random.uniform(low = -1, high = 2))
+            x = add_noise(x, np.random.uniform(low = MIN_SNR, high = MAX_SNR))
 
         # Process
         x = spectrogram_transform(x)
