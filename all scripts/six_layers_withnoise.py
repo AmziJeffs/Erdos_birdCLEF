@@ -37,7 +37,7 @@ MAX_SAMPLE_LENGTH = 60 # Trim every sample to <= 60 seconds
 
 # Min and max signal to noise ratio
 MAX_SNR = 20
-MIN_SNR = -10
+MIN_SNR = -5
 
 ################################################################################
 # IMPORTS
@@ -114,6 +114,16 @@ print("Recomputing durations")
 data['duration'] = data['signal'].progress_apply(lambda x: x.shape[1]/SAMPLE_RATE)
 print("Done")
 
+print("Loading nocall background noise snippets into memory")
+nocalls = pd.read_csv(f"{DATA_DIR}nocall_snippets/filenames.csv")
+def load_nocall(filepath):
+    signal, _ = torchaudio.load(filepath)
+    # Reduce to one channel
+    signal = torch.mean(signal,dim = 0).unsqueeze(0)
+    return signal
+nocalls['signal'] = nocalls['filename'].progress_apply(lambda x: load_nocall(f"{DATA_DIR}nocall_snippets/{x}"))
+print("Done")
+
 # Train test split, stratified by species
 stratify = data['primary_label']
 if ABRIDGED_RUN == True:
@@ -163,7 +173,6 @@ def time_mask(spec, T=40):
     spec[:, :, t_zero:t_zero+t] = 0
     return spec
 
-
 # Taken from https://www.earthinversion.com/datascience/pink_noise_vs_white_noise/
 def generate_pink_noise(samples):
     b = [0.049922035, -0.095993537, 0.050612699, -0.004408786]
@@ -176,10 +185,13 @@ def generate_pink_noise(samples):
 
 # Signal is a torch tensor of shape [1, _]
 # snr is signal to noise ratio in dB, a float
-def add_noise(signal, snr):
+def add_pink_noise(signal, snr):
     pink = generate_pink_noise(signal.shape[1])
     return torchaudio.functional.add_noise(signal, pink, torch.Tensor([snr]))
 
+def add_bg_noise(signal, snr):
+    bg_noise = nocalls['signal'].sample(1).iloc[0]
+    return torchaudio.functional.add_noise(signal, bg_noise, torch.Tensor([snr]))
 
 ################################################################################
 ################################################################################
@@ -201,7 +213,7 @@ def add_noise(signal, snr):
 # Config should have the format of a dictionary
 class BirdDataset(Dataset):
     def __init__(self, signals, labels, training = True,
-        config = {'use_mel': True, 'time_mask': True, 'freq_mask': True}):
+        config = {'use_mel': True, 'time_mask': True, 'freq_mask': True, 'pink_noise':True, 'bg_noise':True}):
         super().__init__()
         self.training = training
         self.config = config
@@ -220,9 +232,13 @@ class BirdDataset(Dataset):
         start = np.random.randint(x.shape[1]-SAMPLE_RATE*SAMPLE_LENGTH+1)
         x = x[:, start:start + SAMPLE_RATE*SAMPLE_LENGTH]
 
-        # Add noise
-        if self.training:
-            x = add_noise(x, np.random.uniform(low = MIN_SNR, high = MAX_SNR))
+        # Add pink noise
+        if self.training and self.config['pink_noise']:
+            x = add_pink_noise(x, np.random.uniform(low = MIN_SNR, high = MAX_SNR))
+
+        # Add background noise
+        if self.training and self.config['bg_noise']:
+            x = add_bg_noise(x, np.random.uniform(low = MIN_SNR, high = MAX_SNR))
 
         # Process
         x = spectrogram_transform(x)
@@ -369,7 +385,7 @@ train_dataloader = DataLoader(train_dataset,
 validation_dataset =  BirdDataset(signals = data_validation['signal'].to_list(), 
                                   labels = data_validation['index_label'].to_list(),
                                   training = False)
-validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False)
+validation_dataloader = DataLoader(validation_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 # Instantiate our model
 model = BirdClassifier(NUM_SPECIES).to(device)
