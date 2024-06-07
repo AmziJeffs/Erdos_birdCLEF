@@ -3,7 +3,7 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = False
+ABRIDGED_RUN = True
 SAVE_AFTER_TRAINING = True # Save the model when you are done
 SAVE_CHECKPOINTS = True # Save the model after ever epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
@@ -27,12 +27,13 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #    clip, with freq/time masking and random power.
 #  - Validate on a random 5-second window of every clip without
 #    freq/time masking or random power
-MODEL_NAME = "CE_0-60_BS32_dropout_NOISE_-10_20"
+MODEL_NAME = "CE_3.5-60_bg_noise_-10_20"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
 SAMPLE_LENGTH = 5 # Duration we want to crop our audio to
 NUM_SPECIES = 182 # Number of bird species we need to label
+MIN_SAMPLE_LENGTH = 3.5 # Trim every sample to <= 60 seconds
 MAX_SAMPLE_LENGTH = 60 # Trim every sample to <= 60 seconds
 
 # Min and max signal to noise ratio
@@ -91,7 +92,7 @@ data['index_label'] = data['primary_label'].apply(lambda x: species_to_index[x])
 data['tensor_label'] = pd.Series(pd.get_dummies(data['primary_label']).astype(int).values.tolist()).apply(lambda x: torch.Tensor(x))
 
 # Remove overly short clips
-data = data[data['duration'] >= 3.5]
+data = data[data['duration'] >= MIN_SAMPLE_LENGTH]
 
 # Use 10 rows of data for quick runs to test functionalities
 if ABRIDGED_RUN == True:
@@ -212,14 +213,24 @@ def add_bg_noise(signal, snr):
 # Training boolean is used to decide whether to apply masks
 # Config should have the format of a dictionary
 class BirdDataset(Dataset):
-    def __init__(self, signals, labels, training = True,
-        config = {'use_mel': True, 'time_mask': True, 'freq_mask': True, 'pink_noise':True, 'bg_noise':True}):
+    def __init__(self, signals, labels, 
+                 training = True,
+                 use_mel = True,
+                 time_mask = True, 
+                 freq_mask = True, 
+                 pink_noise = True,
+                 bg_noise = True):
         super().__init__()
-        self.training = training
-        self.config = config
         print(f'Preprocessing {"training" if training else "validation"} data\n')
         self.processed_clips = signals
         self.labels = labels
+
+        self.training = training
+        self.use_mel = use_mel
+        self.time_mask = time_mask
+        self.freq_mask = freq_mask
+        self.pink_noise = pink_noise
+        self.bg_noise = bg_noise
 
     def __len__(self):
         return len(self.processed_clips)
@@ -233,24 +244,24 @@ class BirdDataset(Dataset):
         x = x[:, start:start + SAMPLE_RATE*SAMPLE_LENGTH]
 
         # Add pink noise
-        if self.training and self.config['pink_noise']:
+        if self.training and self.pink_noise:
             x = add_pink_noise(x, np.random.uniform(low = MIN_SNR, high = MAX_SNR))
 
         # Add background noise
-        if self.training and self.config['bg_noise']:
+        if self.training and self.bg_noise:
             x = add_bg_noise(x, np.random.uniform(low = MIN_SNR, high = MAX_SNR))
 
         # Process
         x = spectrogram_transform(x)
-        if self.config['use_mel']:
+        if self.use_mel:
             x = mel_spectrogram_transform(x)
         if self.training:
             exponent = np.random.uniform(low = 0.5, high = 3)
             x = torch.pow(x, exponent)
         x = db_scaler(x)
-        if self.config['time_mask'] and self.training:
+        if self.time_mask and self.training:
             x = time_mask(x)
-        if self.config['freq_mask'] and self.training:
+        if self.freq_mask and self.training:
             x = freq_mask(x)
         x = resize(x)
         return x, self.labels[index]
