@@ -98,8 +98,20 @@ data = data[data['duration'] >= MIN_SAMPLE_LENGTH]
 if ABRIDGED_RUN == True:
     data = data.sample(100)
 
-print("Loading audio signals into memory")
+# Progress bars for loading data to memory
 tqdm.pandas()
+
+print("Loading nocall background noise snippets into memory")
+nocalls = pd.read_csv(f"{DATA_DIR}nocall_snippets/filenames.csv")
+def load_nocall(filepath):
+    signal, _ = torchaudio.load(filepath)
+    # Reduce to one channel
+    signal = torch.mean(signal,dim = 0).unsqueeze(0)
+    return signal
+nocalls['signal'] = nocalls['filename'].progress_apply(lambda x: load_nocall(f"{DATA_DIR}nocall_snippets/{x}"))
+print("Done")
+
+print("Loading training audio signals into memory")
 # Loads signal to memory, pads to 5 seconds, cuts to 60 seconds
 def filepath_to_signal(filepath):
     signal, _ = torchaudio.load(filepath)
@@ -113,16 +125,6 @@ data['signal'] = data['filepath'].progress_apply(filepath_to_signal)
 print("Done")
 print("Recomputing durations")
 data['duration'] = data['signal'].progress_apply(lambda x: x.shape[1]/SAMPLE_RATE)
-print("Done")
-
-print("Loading nocall background noise snippets into memory")
-nocalls = pd.read_csv(f"{DATA_DIR}nocall_snippets/filenames.csv")
-def load_nocall(filepath):
-    signal, _ = torchaudio.load(filepath)
-    # Reduce to one channel
-    signal = torch.mean(signal,dim = 0).unsqueeze(0)
-    return signal
-nocalls['signal'] = nocalls['filename'].progress_apply(lambda x: load_nocall(f"{DATA_DIR}nocall_snippets/{x}"))
 print("Done")
 
 # Train test split, stratified by species
@@ -216,10 +218,10 @@ class BirdDataset(Dataset):
     def __init__(self, signals, labels, 
                  training = True,
                  use_mel = True,
-                 time_mask = True, 
-                 freq_mask = True, 
-                 pink_noise = True,
-                 bg_noise = True):
+                 use_time_mask = True, 
+                 use_freq_mask = True, 
+                 use_pink_noise = True,
+                 use_bg_noise = True):
         super().__init__()
         print(f'Preprocessing {"training" if training else "validation"} data\n')
         self.processed_clips = signals
@@ -227,10 +229,10 @@ class BirdDataset(Dataset):
 
         self.training = training
         self.use_mel = use_mel
-        self.time_mask = time_mask
-        self.freq_mask = freq_mask
-        self.pink_noise = pink_noise
-        self.bg_noise = bg_noise
+        self.use_time_mask = use_time_mask
+        self.use_freq_mask = use_freq_mask
+        self.use_pink_noise = use_pink_noise
+        self.use_bg_noise = use_bg_noise
 
     def __len__(self):
         return len(self.processed_clips)
@@ -244,11 +246,11 @@ class BirdDataset(Dataset):
         x = x[:, start:start + SAMPLE_RATE*SAMPLE_LENGTH]
 
         # Add pink noise
-        if self.training and self.pink_noise:
+        if self.use_pink_noise and self.training:
             x = add_pink_noise(x, np.random.uniform(low = MIN_SNR, high = MAX_SNR))
 
         # Add background noise
-        if self.training and self.bg_noise:
+        if self.use_bg_noise and self.training:
             x = add_bg_noise(x, np.random.uniform(low = MIN_SNR, high = MAX_SNR))
 
         # Process
@@ -259,9 +261,9 @@ class BirdDataset(Dataset):
             exponent = np.random.uniform(low = 0.5, high = 3)
             x = torch.pow(x, exponent)
         x = db_scaler(x)
-        if self.time_mask and self.training:
+        if self.use_time_mask and self.training:
             x = time_mask(x)
-        if self.freq_mask and self.training:
+        if self.use_freq_mask and self.training:
             x = freq_mask(x)
         x = resize(x)
         return x, self.labels[index]
@@ -387,7 +389,8 @@ output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
 # Instantiate our training dataset
 train_dataset = BirdDataset(signals = data_train['signal'].to_list(), 
                             labels = data_train['index_label'].to_list(),
-                            training = True)
+                            training = True,
+                            use_pink_noise = False)
 train_dataloader = DataLoader(train_dataset,
                               batch_size=BATCH_SIZE,
                               shuffle=True)
