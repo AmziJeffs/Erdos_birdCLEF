@@ -5,14 +5,6 @@
 # Convenience and saving flags
 ABRIDGED_RUN = False  # Set to True to train and validate on 10% of the data, for quick funcitonality tests etc
 SAVE_AFTER_TRAINING = True # Save the model when you are done
-SAVE_CHECKPOINTS = True # Save the model after every epoch
-REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
-REPORT_VALIDATION_LOSS_PER_EPOCH = True # Lets us make a nice learning curve after training
-
-# Training hyperparameters
-BATCH_SIZE = 64 # Number of samples per batch while training our network
-NUM_EPOCHS = 50 # Number of epochs to train our network
-LEARNING_RATE = 0.001 # Learning rate for our optimizer
 
 # Directories
 DATA_DIR = "../data/"
@@ -21,7 +13,7 @@ CHECKPOINT_DIR = "checkpoints/" # Checkpoints, models, and training data will be
 MODEL_NAME = "BIRDCALL_DETECTION_DCASE_ALL_DATA"
 
 # Preprocessing info
-SAMPLE_RATE = 32000 # All our audio uses this sample rate
+SAMPLE_RATE = 44100 # All our audio uses this sample rate
 SAMPLE_LENGTH = 5 # Duration we want to crop our audio to
 
 ################################################################################
@@ -56,6 +48,8 @@ import torchvision.models as models
 from torchaudio.transforms import MelSpectrogram, Resample
 from IPython.display import Audio
 import torch.optim as optim
+from torcheval.metrics import BinaryAUROC
+
 
 print("Done")
 
@@ -71,9 +65,7 @@ dcase['filepath'] = AUDIO_DIR_DCASE + dcase['itemid'].astype(str)+'.wav'
 print("Loading audio signals into memory")
 tqdm.pandas()
 def filepath_to_signal(filepath):
-    sample, sr = torchaudio.load(filepath)
-    # Resampling to desired sample rate
-    sample = torchaudio.functional.resample(sample, orig_freq = sr, new_freq = SAMPLE_RATE)
+    sample, _ = torchaudio.load(filepath)
     return sample
 dcase['signal'] = dcase['filepath'].progress_apply(filepath_to_signal)
 print("Done")
@@ -145,32 +137,27 @@ def time_mask(spec, T=40):
 # Slice a sequence into segments
 def slices(seq, window_size = SAMPLE_RATE*SAMPLE_LENGTH, stride = None, align_left = True, return_scraps = True):
     # If one window is larger than the sequence, just return the scraps or nothing
-    if window_size > seq.shape[0]:
+    if window_size > seq.squeeze().size(dim=0):
         if return_scraps == True:
             return [seq]
         else:
             return []
-
     # If stride is None, it defaults to window_size
     if stride == None:
         stride = window_size
-
     index_slices = []
     left_pointer = 0
-    while left_pointer + window_size <= seq.shape[0]:
+    while left_pointer + window_size <= seq.squeeze().size(dim=0):
         index_slices += [[left_pointer, left_pointer + window_size]]
         left_pointer += stride
-
     if align_left == False:
-        offset = seq.shape[0]-(left_pointer-stride)-window_size
+        offset = seq.squeeze().size(dim=0)-(left_pointer-stride)-window_size
         index_slices = [[a+offset, b+offset] for [a,b] in index_slices]
-
-    if return_scraps == True and left_pointer < seq.shape[0]:
+    if return_scraps == True and left_pointer < seq.squeeze().size(dim=0):
         if align_left == True:
-            index_slices += [[left_pointer, seq.shape[0]]]
+            index_slices += [[left_pointer, seq.squeeze().size(dim=0)]]
         else:
-            index_slices += [[0, seq.shape[0] - left_pointer]]
-
+            index_slices += [[0, seq.squeeze().size(dim=0) - left_pointer]]
     return [seq[a:b] for [a,b] in index_slices]
 
 # Note: signals and labels should be ordinary lists
@@ -184,11 +171,10 @@ class DCaseData(Dataset):
         self.config = config
         print(f'Preprocessing {"training" if training else "validation"} data\n')
         self.processed_clips, self.labels = self.process(signals, labels)
-
     def process(self, signals, labels):
         results = []
         new_labels = []
-        for i, signal in enumerate(tqdm(signals, total = len(signals), leave = False)):
+        for i, signal in enumerate(signals):
             # Uniformize to 5 seconds
             if signal.shape[1] < SAMPLE_RATE * SAMPLE_LENGTH:
                 pad_length = SAMPLE_RATE * SAMPLE_LENGTH - signal.shape[1]
@@ -198,10 +184,8 @@ class DCaseData(Dataset):
                 results += [clip.unsqueeze(0)]
                 new_labels += [labels[i]]
         return results, new_labels
-
     def __len__(self):
         return len(self.processed_clips)
-
     def __getitem__(self, index):
         # Process clip to tensor
         x = self.processed_clips[index]
@@ -215,7 +199,7 @@ class DCaseData(Dataset):
             x = freq_mask(x)
         x = resize(x)
         return x, self.labels[index]
-
+    
 ################################################################################
 # ARCHITECTURE
 ################################################################################
@@ -277,7 +261,6 @@ class BirdCallDetector(nn.Module):
                 padding=2
             ),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2)
         )
         self.conv6 = nn.Sequential(
             nn.Conv2d(
@@ -293,7 +276,6 @@ class BirdCallDetector(nn.Module):
         self.flatten = nn.Flatten()
         self.linear = nn.Linear(10368, 2)
         self.softmax = nn.Softmax(dim=1)
-
     def forward(self, input_data):
         x = self.conv1(input_data)
         x = self.conv2(x)
@@ -306,128 +288,17 @@ class BirdCallDetector(nn.Module):
         predictions = self.softmax(logits)
         return predictions
     
-    
-################################################################################
-# TRAINING SETUP
-################################################################################
-
-# Set device we'll train on
-device = None
-if torch.cuda.is_available():
-    device = "cuda"
-else:
-    device = "cpu"
-print(f"Using {device} for training")
-
-# Create a saving directory if needed
-output_dir = Path(f'{CHECKPOINT_DIR}{MODEL_NAME}')
-output_dir.mkdir(parents=True, exist_ok=True)
-output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
-
-# Instantiate our training dataset
-train_dataset = DCaseData(signals = dcase_train['signal'].to_list(), 
-                                labels = dcase_train['hasbird'].to_list(),
-                                training=True)
-train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-
-# Instantiate our validation dataset
 validation_dataset =  DCaseData(signals = dcase_test['signal'].to_list(), 
                                 labels = dcase_test['hasbird'].to_list(),
                                 training = False)
 validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=False)
 
-# Instantiate our model
-model = BirdCallDetector().to(device)
-
-# Set our loss function and optimizer
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
-
 ################################################################################
-# TRAINING LOOP
+# EVALUATE AUROC ON VALIDATION DATASET
 ################################################################################
 
-print(f"Training on {len(train_dataset)} samples with {BATCH_SIZE} samples per batch.")
-if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
-    print(f"Validating on {len(validation_dataset)} samples at the end of each epoch.")
+metric = BinaryAUROC()
+model = torch.load('BIRDCALL_DETECTION_DCASE_ALL_DATA.pt')
 
-training_losses = [None]*NUM_EPOCHS
-validation_losses = [None]*NUM_EPOCHS
 
-torch.enable_grad() # Turn on the gradient
 
-for epoch_num, epoch in enumerate(tqdm(range(NUM_EPOCHS), leave = False)):
-
-    running_loss = 0.0
-    
-    for i, data in enumerate(tqdm(train_dataloader, leave = False)):
-        
-        # Get batch of inputs and true labels, push to device
-        inputs, labels = data
-        inputs, labels = inputs.to(device), labels.to(device)
-
-        # Zero gradients
-        optimizer.zero_grad()
-
-        # Forward pass on batch of inputs
-        outputs = model(inputs)
-
-        # Compute the loss and its gradients
-        loss = criterion(outputs, labels)
-        loss.backward()
-
-        # Update weights
-        optimizer.step()
-
-        # Update loss
-        running_loss += loss.item()
-
-    # Save checkpoint
-    if SAVE_CHECKPOINTS == True:
-        torch.save(model.state_dict(), f"{CHECKPOINT_DIR}{MODEL_NAME}/checkpoint_{epoch_num+1}.pt")
-
-    # Compute training loss
-    if REPORT_TRAINING_LOSS_PER_EPOCH == True:    
-        training_losses[epoch_num] = running_loss/len(train_dataloader)
-        
-    # Compute validation loss
-    if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
-        validation_loss = 0.0
-        model.eval()
-        for validation_data in validation_dataloader:
-            inputs, labels = validation_data
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            validation_loss += criterion(outputs, labels).item()
-        validation_losses[epoch_num] = validation_loss/len(validation_dataloader)
-        model.train()
-
-    # Save losses
-    losses = pd.DataFrame({"training_losses":training_losses, "validation_losses":validation_losses})
-    cols = []
-    if REPORT_TRAINING_LOSS_PER_EPOCH == True:
-        cols += ["training_losses"]
-    if REPORT_VALIDATION_LOSS_PER_EPOCH == True:
-        cols += ["validation_losses"]
-    if len(cols) > 0:
-        losses[cols].to_csv(f'{output_dir}/losses.csv', index = False)
-
-print('Finished Training')
-
-################################################################################
-# SAVE AND REPORT
-################################################################################
-
-if SAVE_AFTER_TRAINING == True:
-    torch.save(model.state_dict(), f'{output_dir}/final.pt')
-
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
