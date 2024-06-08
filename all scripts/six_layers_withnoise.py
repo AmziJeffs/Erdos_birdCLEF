@@ -24,9 +24,9 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #  - Trim clips to <= 60 seconds
 #  - Loss function is CrossEntropyLoss
 #  - During each epoch, train on a random 5-second window of every
-#    clip, with freq/time masking and random power.
+#    clip, with freq/time masking, random power, and nocall bg noise.
 #  - Validate on a random 5-second window of every clip without
-#    freq/time masking or random power
+#    freq/time masking, random power, or bg noise.
 MODEL_NAME = "CE_3.5-60_bg_noise_-10_20"
 
 # Preprocessing info
