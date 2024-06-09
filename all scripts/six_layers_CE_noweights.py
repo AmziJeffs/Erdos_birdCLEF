@@ -11,7 +11,7 @@ REPORT_VALIDATION_LOSS_PER_EPOCH = True # Lets us make a nice learning curve aft
 
 # Training hyperparameters
 BATCH_SIZE = 32 # Number of samples per batch while training our network
-NUM_EPOCHS = 30 # Number of epochs to train our network
+NUM_EPOCHS = 60 # Number of epochs to train our network
 LEARNING_RATE = 0.001 # Learning rate for our optimizer
 
 # Directories
@@ -27,7 +27,7 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #    clip, with freq/time masking and random power.
 #  - Validate on a random 5-second window of every clip without
 #    freq/time masking or random power
-MODEL_NAME = "SIX_LAYERS_CE_FIRSTMIN_NOWEIGHTS_BATCHSIZE32"
+MODEL_NAME = "CE_0-60_BS32_dropout"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
@@ -99,7 +99,7 @@ tqdm.pandas()
 def filepath_to_signal(filepath):
     signal, _ = torchaudio.load(filepath)
     if signal.shape[1] < SAMPLE_RATE * SAMPLE_LENGTH:
-        pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(signal)
+        pad_length = SAMPLE_RATE * SAMPLE_LENGTH - signal.shape[1]
         signal = torch.nn.functional.pad(signal, (0, pad_length))
     if signal.shape[1] > SAMPLE_RATE*MAX_SAMPLE_LENGTH:
         signal = signal[:, :SAMPLE_RATE*MAX_SAMPLE_LENGTH]
@@ -274,6 +274,7 @@ class BirdClassifier(nn.Module):
                 padding=2
             ),
             nn.ReLU(),
+            nn.Dropout()
         )
         self.conv6 = nn.Sequential(
             nn.Conv2d(
@@ -283,7 +284,8 @@ class BirdClassifier(nn.Module):
                 stride=1,
                 padding=2
             ),
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout()
         )
         self.flatten = nn.Flatten()
         self.linear = nn.Linear(46208, num_classes)
