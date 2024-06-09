@@ -277,7 +277,6 @@ class BirdCallDetector(nn.Module):
                 padding=2
             ),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2)
         )
         self.conv6 = nn.Sequential(
             nn.Conv2d(
