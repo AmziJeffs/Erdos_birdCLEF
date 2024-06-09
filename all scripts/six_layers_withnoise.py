@@ -3,7 +3,7 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = True
+ABRIDGED_RUN = False
 SAVE_AFTER_TRAINING = True # Save the model when you are done
 SAVE_CHECKPOINTS = True # Save the model after ever epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
@@ -27,14 +27,14 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #    clip, with freq/time masking, random power, and nocall bg noise.
 #  - Validate on a random 5-second window of every clip without
 #    freq/time masking, random power, or bg noise.
-MODEL_NAME = "CE_3.5-60_bg_noise_-10_20"
+MODEL_NAME = "CE_3.5-10_pinknoise_-10_20"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
 SAMPLE_LENGTH = 5 # Duration we want to crop our audio to
 NUM_SPECIES = 182 # Number of bird species we need to label
-MIN_SAMPLE_LENGTH = 3.5 # Trim every sample to <= 60 seconds
-MAX_SAMPLE_LENGTH = 60 # Trim every sample to <= 60 seconds
+MIN_SAMPLE_LENGTH = 3.5 # Only use samples with length >= 3.5 seconds
+MAX_SAMPLE_LENGTH = 10 # Trim every sample to <= 10 seconds
 
 # Min and max signal to noise ratio
 MAX_SNR = 20
@@ -116,7 +116,7 @@ print("Loading training audio signals into memory")
 def filepath_to_signal(filepath):
     signal, _ = torchaudio.load(filepath)
     if signal.shape[1] < SAMPLE_RATE * SAMPLE_LENGTH:
-        pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(signal)
+        pad_length = SAMPLE_RATE * SAMPLE_LENGTH - signal.shape[1]
         signal = torch.nn.functional.pad(signal, (0, pad_length))
     if signal.shape[1] > SAMPLE_RATE*MAX_SAMPLE_LENGTH:
         signal = signal[:, :SAMPLE_RATE*MAX_SAMPLE_LENGTH]
@@ -390,7 +390,8 @@ output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
 train_dataset = BirdDataset(signals = data_train['signal'].to_list(), 
                             labels = data_train['index_label'].to_list(),
                             training = True,
-                            use_pink_noise = False)
+                            use_pink_noise = True,
+                            use_bg_noise = False)
 train_dataloader = DataLoader(train_dataset,
                               batch_size=BATCH_SIZE,
                               shuffle=True)
