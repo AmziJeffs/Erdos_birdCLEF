@@ -3,7 +3,7 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = False
+ABRIDGED_RUN = True
 SAVE_AFTER_TRAINING = True # Save the model when you are done
 SAVE_CHECKPOINTS = True # Save the model after ever epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
@@ -18,7 +18,7 @@ LEARNING_RATE = 0.001 # Learning rate for our optimizer
 CHECKPOINT_DIR = "checkpoints/" # Checkpoints, models, and training data will be saved here
 DATA_DIR = "data/"
 AUDIO_DIR = DATA_DIR + "train_audio/"
-MODEL_NAME = "SIX_LAYERS_RANDOM_5SEC_AND_POWER"
+MODEL_NAME = "SIX_LAYERS"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
@@ -75,7 +75,6 @@ data = data[['filepath', 'primary_label']]
 species = data['primary_label'].unique()
 species_to_index = {species[i]:i for i in range(len(species))}
 data['tensor_label'] = pd.Series(pd.get_dummies(data['primary_label']).astype(int).values.tolist()).apply(lambda x: torch.Tensor(x))
-data.sample(5)
 
 # Use 100 rows of data for quick runs to test functionalities
 if ABRIDGED_RUN == True:
@@ -172,7 +171,7 @@ class BirdDataset(Dataset):
         for i, signal in enumerate(tqdm(signals, total = len(signals), leave = False)):
             # Uniformize to at least 5 seconds
             if signal.shape[1] < SAMPLE_RATE * SAMPLE_LENGTH:
-                pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(signal)
+                pad_length = SAMPLE_RATE * SAMPLE_LENGTH - signal.shape[1]
                 signal = torch.nn.functional.pad(signal, (0, pad_length))
             results += [signal]
             new_labels += [labels[i]]
