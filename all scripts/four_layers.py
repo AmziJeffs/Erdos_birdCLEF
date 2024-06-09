@@ -174,7 +174,7 @@ class BirdDataset(Dataset):
            if signal.shape[1] > SAMPLE_RATE * MAX_SAMPLE_LENGTH:
                 signal = signal[:,:SAMPLE_RATE * MAX_SAMPLE_LENGTH]
             else:
-                pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(signal)
+                pad_length = SAMPLE_RATE * SAMPLE_LENGTH - signal.shape[1]
                 signal = torch.nn.functional.pad(signal, (0, pad_length))
             results += [signal]
         return results, labels

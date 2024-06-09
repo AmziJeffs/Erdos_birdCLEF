@@ -204,7 +204,7 @@ class BirdDataset(Dataset):
         for i, signal in enumerate(tqdm(signals, total = len(signals), leave = False)):
             # Uniformize to 5 seconds
             if signal.shape[1] < SAMPLE_RATE * SAMPLE_LENGTH:
-                pad_length = SAMPLE_RATE * SAMPLE_LENGTH - len(signal)
+                pad_length = SAMPLE_RATE * SAMPLE_LENGTH - signal.shape[1]
                 signal = torch.nn.functional.pad(signal, (0, pad_length))
             # Cut signal into 5 second chunks to save
             for clip in slices(signal.squeeze()):
