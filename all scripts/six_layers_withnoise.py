@@ -11,7 +11,7 @@ REPORT_VALIDATION_LOSS_PER_EPOCH = True # Lets us make a nice learning curve aft
 
 # Training hyperparameters
 BATCH_SIZE = 32 # Number of samples per batch while training our network
-NUM_EPOCHS = 80 # Number of epochs to train our network
+NUM_EPOCHS = 120 # Number of epochs to train our network
 LEARNING_RATE = 0.001 # Learning rate for our optimizer
 
 # Directories
@@ -27,18 +27,18 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #    clip, with freq/time masking, random power, and nocall bg noise.
 #  - Validate on a random 5-second window of every clip without
 #    freq/time masking, random power, or bg noise.
-MODEL_NAME = "CE_3.5-10_pinknoise_-10_20"
+MODEL_NAME = "CE_3.5-120_pinknoise_-10_20"
 
 # Preprocessing info
 SAMPLE_RATE = 32000 # All our audio uses this sample rate
 SAMPLE_LENGTH = 5 # Duration we want to crop our audio to
 NUM_SPECIES = 182 # Number of bird species we need to label
 MIN_SAMPLE_LENGTH = 3.5 # Only use samples with length >= 3.5 seconds
-MAX_SAMPLE_LENGTH = 10 # Trim every sample to <= 10 seconds
+MAX_SAMPLE_LENGTH = 120 # Trim every sample to <= 10 seconds
 
 # Min and max signal to noise ratio
 MAX_SNR = 20
-MIN_SNR = -5
+MIN_SNR = -10
 
 ################################################################################
 # IMPORTS
@@ -79,7 +79,7 @@ print("Done")
 # LOAD DATA
 ################################################################################
 
-data = pd.read_csv(DATA_DIR+"train_metadata.csv")
+data = pd.read_csv(DATA_DIR+"full_metadata.csv")
 data['filepath'] = AUDIO_DIR + data['filename']
 
 # We only need the filepath and species label
