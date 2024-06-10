@@ -3,7 +3,7 @@
 ################################################################################
 
 # Convenience and saving flags
-ABRIDGED_RUN = False
+ABRIDGED_RUN = True
 SAVE_AFTER_TRAINING = True # Save the model when you are done
 SAVE_CHECKPOINTS = True # Save the model after ever epoch
 REPORT_TRAINING_LOSS_PER_EPOCH = True # Track the training loss each epoch, and write it to a file after training
@@ -26,7 +26,7 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #  - Loss function is CrossEntropyLoss
 #  - Train with freq/time masking, random power, and pink bg noise.
 #  - Validate without freq/time masking, random power, or bg noise.
-MODEL_NAME = "CE_ALLDATA_PINKBG_WITHDETECT"
+MODEL_NAME = "CE_ALLDATA_PINKBG_WITHDETECT_ABRIDGED"
 DETECTION_MODEL = 'BIRDCALL_DETECTION_DCASE_FINAL'
 
 # Preprocessing info
