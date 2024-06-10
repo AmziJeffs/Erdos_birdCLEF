@@ -356,7 +356,7 @@ class BirdDataset(Dataset):
                  use_mel = True,
                  use_time_mask = True, 
                  use_freq_mask = True, 
-                 use_pink_noise = True):
+                 use_pink_noise = False):
         super().__init__()
         self.training = training
         self.use_mel = use_mel

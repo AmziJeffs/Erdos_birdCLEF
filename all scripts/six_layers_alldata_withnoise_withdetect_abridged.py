@@ -541,8 +541,8 @@ validation_dataloader = DataLoader(validation_dataset, batch_size=BATCH_SIZE, sh
 model = BirdClassifier(NUM_SPECIES).to(device)
 
 # Set our loss function and optimizer
-pos_weight = torch.ones([len(species)])
-criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+pos_weight = torch.ones([len(species)]).to(device)
+criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight).to(device)
 optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
 # Training loop
