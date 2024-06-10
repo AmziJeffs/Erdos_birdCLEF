@@ -27,7 +27,7 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #  - Train with freq/time masking, random power, and pink bg noise.
 #  - Validate without freq/time masking, random power, or bg noise.
 #  - Model output will be a vector of logits. Need to apply sigmoid to get probabilities.
-MODEL_NAME = "BCE_ALLDATA_PINKBG_WITHDETECT"
+MODEL_NAME = "BCE_ALLDATA_PINKBG_WITHDETECT_RANDOMSAMPLE"
 DETECTION_MODEL = 'BIRDCALL_DETECTION_DCASE_FINAL'
 
 # Preprocessing info
