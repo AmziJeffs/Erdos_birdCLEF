@@ -365,7 +365,7 @@ class BirdDataset(Dataset):
         self.use_pink_noise = use_pink_noise
         print(f'Preprocessing {"training" if training else "validation"} data\n')
         self.processed_clips = signals
-        self.labels = new_labels
+        self.labels = labels
 
     def __len__(self):
         return len(self.processed_clips)

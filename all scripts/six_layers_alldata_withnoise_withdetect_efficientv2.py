@@ -386,9 +386,10 @@ class BirdDataset(Dataset):
                     clip_labels += [labels[i]]
                 else:
                     clip_labels += [torch.zeros(len(species))]
+            if len(clips) > 0:
+                processed_labels += [clip_labels]
+                processed_clips += [[x.unsqueeze(0) for x in clips]]
 
-            processed_labels += [clip_labels]
-            processed_clips += [clips]
         return processed_clips, processed_labels
 
     def __len__(self):
@@ -398,13 +399,10 @@ class BirdDataset(Dataset):
         segments = self.processed_clips[index]
         segment_labels = self.labels[index]
 
-        segment_index = np.random.randint(low = 0, high = len(segments)-1)
+        segment_index = np.random.randint(low = 0, high = len(segments))
 
         x = segments[segment_index]
         label = segment_labels[segment_index]
-
-        # Process clip to tensor
-        x = self.processed_clips[index]
 
         # Add pink noise
         if self.use_pink_noise and self.training:
