@@ -284,7 +284,7 @@ else:
 print(f"Using {device}")
 
 detection_model = BirdCallDetector().to(device)
-detection_model.load_state_dict(torch.load(CHECKPOINT_DIR + DETECTION_MODEL + '/final.pt'))
+detection_model.load_state_dict(torch.load(CHECKPOINT_DIR + DETECTION_MODEL + '/final.pt', map_location=torch.device(device)))
 detection_model.eval()
 
 ################################################################################
@@ -334,7 +334,7 @@ def slices(seq, window_size = SAMPLE_RATE*SAMPLE_LENGTH, stride = None, align_le
     if align_left == True and left_pointer < seq.shape[0]:
         scrap = seq[left_pointer : seq.shape[0]]
         pad_length = window_size - (seq.shape[0]-left_pointer)
-        scrap = torch.nn.functional.pad(scrap (0, pad_length))
+        scrap = torch.nn.functional.pad(scrap, (0, pad_length))
         result.append(scrap)
 
     elif align_left == False and index_slices[0][1] > stride:
@@ -524,8 +524,7 @@ output_dir = f'{CHECKPOINT_DIR}{MODEL_NAME}'
 train_dataset = BirdDataset(signals = data_train['signal'].to_list(), 
                             labels = data_train['index_label'].to_list(),
                             training = True,
-                            use_pink_noise = True,
-                            use_bg_noise = False)
+                            use_pink_noise = True)
 train_dataloader = DataLoader(train_dataset,
                               batch_size=BATCH_SIZE,
                               shuffle=True)
