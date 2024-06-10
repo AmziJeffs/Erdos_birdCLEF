@@ -23,10 +23,11 @@ AUDIO_DIR = DATA_DIR + "train_audio/"
 #  - Split each audio file into 5 second clips
 #  - Discard any scrap with duration less than 3.5s. Pad others.
 #  - Run Birdcall detection on each clip and change labels appropriately
-#  - Loss function is CrossEntropyLoss
+#  - Loss function is BCEWithLogitsLoss
 #  - Train with freq/time masking, random power, and pink bg noise.
 #  - Validate without freq/time masking, random power, or bg noise.
-MODEL_NAME = "CE_ALLDATA_PINKBG_WITHDETECT_ABRIDGED"
+#  - Model output will be a vector of logits. Need to apply sigmoid to get probabilities.
+MODEL_NAME = "BCE_ALLDATA_PINKBG_WITHDETECT_ABRIDGED"
 DETECTION_MODEL = 'BIRDCALL_DETECTION_DCASE_FINAL'
 
 # Preprocessing info
@@ -540,7 +541,8 @@ validation_dataloader = DataLoader(validation_dataset, batch_size=BATCH_SIZE, sh
 model = BirdClassifier(NUM_SPECIES).to(device)
 
 # Set our loss function and optimizer
-criterion = nn.CrossEntropyLoss()
+pos_weight = torch.ones([len(species)])
+criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
 # Training loop
