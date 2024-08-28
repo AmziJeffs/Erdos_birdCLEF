@@ -111,6 +111,13 @@ google_labels_path = hub.resolve('https://kaggle.com/models/google/bird-vocaliza
 google_labels = pd.read_csv(google_labels_path)
 labels_2021 = set(google_labels['ebird2021'])
 
+mask = np.zeros(len(labels_2021))
+
+for s in species:
+    if s in labels_2021:
+        index = google_labels.index[google_labels['ebird2021'] == s].tolist()[0]
+        mask[index] = 1
+
 unlabeled_soundscapes = sorted(os.listdir(UNLABELED_DIR))
 step_size = SAMPLE_RATE * 5
 count = 0 
@@ -118,6 +125,8 @@ count = 0
 if ABRIDGED_RUN == True:
     unlabeled_soundscapes = random.sample(unlabeled_soundscapes, 10)
     
+
+
 
 for path in tqdm(unlabeled_soundscapes):
     waveform, sr = librosa.load(UNLABELED_DIR + path, sr=SAMPLE_RATE)
@@ -134,7 +143,9 @@ for path in tqdm(unlabeled_soundscapes):
 
         x = waveform[start:start + SAMPLE_RATE*SAMPLE_LENGTH]
         logits = google_model.infer_tf(x[np.newaxis, :])
-        logits = logits['order'].numpy()
+        logits = logits['label'].numpy()[0]
+        #logits = logits[mask]
+        logits = np.multiply(logits, mask)
         pred_label = google_labels.iloc[[np.argmax(logits)]]['ebird2021'].item() 
         
         if pred_label in species: 
