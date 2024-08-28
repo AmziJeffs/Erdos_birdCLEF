@@ -115,11 +115,10 @@ unlabeled_soundscapes = sorted(os.listdir(UNLABELED_DIR))
 step_size = SAMPLE_RATE * 5
 count = 0 
 
-if ABRIDGED_RUN == True:
-    unlabeled_soundscapes = random.sample(unlabeled_soundscapes, 10)
-    
+unlabeled_soundscapes = random.sample(unlabeled_soundscapes, 800)
 
 for path in tqdm(unlabeled_soundscapes):
+    num_segments = 240 // 5
     waveform, sr = librosa.load(UNLABELED_DIR + path, sr=SAMPLE_RATE)
     waveform = waveform.astype(np.float32)
     dur = librosa.get_duration(y=waveform, sr=sr)
@@ -129,10 +128,8 @@ for path in tqdm(unlabeled_soundscapes):
         continue
     
     
-    for i in range(4):
-        start = np.random.randint(waveform.shape[0]-SAMPLE_RATE*SAMPLE_LENGTH+1)
-
-        x = waveform[start:start + SAMPLE_RATE*SAMPLE_LENGTH]
+    for i in tqdm(range(num_segments)):
+        x = waveform[(step_size*i):(step_size*(i+1))]
         logits = google_model.infer_tf(x[np.newaxis, :])
         logits = logits['order'].numpy()
         pred_label = google_labels.iloc[[np.argmax(logits)]]['ebird2021'].item() 
@@ -146,9 +143,11 @@ for path in tqdm(unlabeled_soundscapes):
             'duration': dur
             }
             data = pd.concat([data, pd.DataFrame([new_row])])
+            break 
     
 
 print(f"Added {count} datapoints from unlabeled soundscape")
+
 
 data['index_label'] = data['primary_label'].apply(lambda x: species_to_index[x])
 data['tensor_label'] = pd.Series(pd.get_dummies(data['primary_label']).astype(int).values.tolist()).apply(lambda x: torch.Tensor(x))
@@ -156,4 +155,4 @@ data['tensor_label'] = pd.Series(pd.get_dummies(data['primary_label']).astype(in
 # Remove overly short clips
 data = data[data['duration'] >= MIN_SAMPLE_LENGTH]
 
-data.to_csv('metadata_with_pseudolabels.csv')
+data.to_csv('metadata_with_pseudolabels_subset.csv')
